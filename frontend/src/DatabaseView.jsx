@@ -275,10 +275,13 @@ function DatabaseView({ onBack }) {
 
         <Paper p="md" style={{ backgroundColor: '#F8F9FA' }}>
           <Stack spacing="md">
-            {paginatedQuestions.map((q) => (
+            {paginatedQuestions.map((q, index) => (
               <div key={q.id} style={{ 
                 padding: '20px', 
                 borderBottom: '1px solid #67D7A4',
+                backgroundColor: index % 2 === 0 ? '#FFFFFF' : 'rgba(103, 215, 164, 0.05)',
+                borderRadius: '8px',
+                marginBottom: '8px',
                 ...(paginatedQuestions.indexOf(q) === paginatedQuestions.length - 1 && { borderBottom: 'none' })
               }}>
                 <Stack spacing="xs">

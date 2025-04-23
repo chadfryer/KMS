@@ -909,7 +909,7 @@ function MainView({ onViewDatabase }) {
                 Process Questionnaire
               </Title>
               <Stack spacing="lg">
-                <Text size="sm" color="dimmed">
+                <Text size="sm" c="#008363">
                   Upload a CSV file with questions only. The system will find matching answers from the knowledge base.
                 </Text>
                 <FileInput

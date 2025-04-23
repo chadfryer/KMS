@@ -407,16 +407,20 @@ async def process_questionnaire(file: UploadFile = File(...), threshold: float =
                 content={"message": "Could not decode the CSV file"}
             )
         
-        # Split into lines and clean up
-        lines = [line.strip() for line in content_str.split('\n') if line.strip()]
-        if not lines:
+        # Use CSV reader to properly handle line breaks and quotes
+        csv_file = io.StringIO(content_str)
+        reader = csv.reader(csv_file, quotechar='"', delimiter=',', quoting=csv.QUOTE_MINIMAL, skipinitialspace=True)
+        
+        # Get headers
+        try:
+            headers = next(reader)
+            headers = [h.strip() for h in headers]
+        except StopIteration:
             return JSONResponse(
                 status_code=400,
                 content={"message": "CSV file is empty"}
             )
         
-        # Get headers
-        headers = [h.strip() for h in lines[0].split(',')]
         if not headers:
             return JSONResponse(
                 status_code=400,
@@ -456,10 +460,7 @@ async def process_questionnaire(file: UploadFile = File(...), threshold: float =
         questions = []
         rows = []
         
-        for line in lines[1:]:  # Skip header
-            # Split the line and clean values
-            values = [v.strip() for v in line.split(',')]
-            
+        for values in reader:
             # Ensure we have enough values for all columns
             while len(values) < len(headers):
                 values.append('')
@@ -504,7 +505,8 @@ async def process_questionnaire(file: UploadFile = File(...), threshold: float =
                         "question": q['question'],
                         "answer_key": q['answer'],
                         "comment": q['comment'] if q['comment'] else None,
-                        "similarity": 1.0
+                        "similarity": 1.0,
+                        "is_ai_generated": False
                     }
                 else:
                     # Use AI processor to find matches and generate answer
@@ -517,7 +519,8 @@ async def process_questionnaire(file: UploadFile = File(...), threshold: float =
                             "answer_key": ai_result['answer'],
                             "comment": f"Confidence: {ai_result['confidence']:.2%}",
                             "similarity": ai_result['confidence'],
-                            "similar_questions": ai_result.get('similar_questions', [])
+                            "similar_questions": ai_result.get('similar_questions', []),
+                            "is_ai_generated": ai_result.get('is_ai_generated', True)
                         }
                     else:
                         best_match = None
@@ -538,14 +541,19 @@ async def process_questionnaire(file: UploadFile = File(...), threshold: float =
                                 row[headers[comment_idx]] = best_match['comment']
                         break
             
-            # Create output CSV content
-            output_lines = [','.join(headers)]  # Start with headers
-            for row in rows:
-                # Get values in the same order as headers
-                values = [str(row.get(h, '')) for h in headers]
-                output_lines.append(','.join(values))
+            # Create output CSV content using csv writer to properly handle special characters
+            output = io.StringIO()
+            writer = csv.writer(output, quotechar='"', delimiter=',', quoting=csv.QUOTE_MINIMAL)
             
-            csv_content = '\n'.join(output_lines)
+            # Write headers
+            writer.writerow(headers)
+            
+            # Write rows
+            for row in rows:
+                values = [str(row.get(h, '')) for h in headers]
+                writer.writerow(values)
+            
+            csv_content = output.getvalue()
             
             return {
                 "results": results,

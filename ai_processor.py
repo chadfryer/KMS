@@ -11,6 +11,7 @@ class AIProcessor:
         self.answers = []
         self.ids = []
         self._load_knowledge_base()
+        print(f"AI Processor initialized with {len(self.questions)} questions in knowledge base")
     
     def _load_knowledge_base(self):
         """Load the knowledge base."""
@@ -40,9 +41,27 @@ class AIProcessor:
             results = cursor.fetchall()
             
             if results:
-                self.questions = [r[1] for r in results]
-                self.answers = [r[2] for r in results]
-                self.ids = [r[0] for r in results]
+                # Clean and process the data
+                cleaned_results = []
+                for r in results:
+                    # Split on pipe character and clean
+                    question = r[1].strip().replace('|', '')
+                    answer = r[2].strip().replace('|', '')
+                    if question and answer:  # Only include non-empty QA pairs
+                        cleaned_results.append((r[0], question, answer))
+                
+                if cleaned_results:
+                    self.questions = [r[1] for r in cleaned_results]
+                    self.answers = [r[2] for r in cleaned_results]
+                    self.ids = [r[0] for r in cleaned_results]
+                    print(f"Loaded {len(cleaned_results)} questions from database")
+                    for i, (q, a) in enumerate(zip(self.questions[:5], self.answers[:5])):
+                        print(f"Sample Question {i+1}: {q}")
+                        print(f"Sample Answer {i+1}: {a}\n")
+                else:
+                    print("No valid questions found after cleaning")
+            else:
+                print("No questions found in database")
             
         except sqlite3.Error as e:
             print(f"Database error: {e}")
@@ -58,9 +77,17 @@ class AIProcessor:
     def _calculate_similarity(self, a: str, b: str) -> float:
         """Calculate similarity between two strings using a combination of methods."""
         try:
+            # First check for exact match (case-insensitive)
+            if a.lower() == b.lower():
+                return 1.0
+                
             # Remove punctuation and convert to lowercase
             a_clean = re.sub(r'[^\w\s]', '', a.lower())
             b_clean = re.sub(r'[^\w\s]', '', b.lower())
+            
+            # Check for exact match after cleaning
+            if a_clean == b_clean:
+                return 1.0
             
             # Get word sets
             a_words = set(a_clean.split())
@@ -84,12 +111,12 @@ class AIProcessor:
             total_words = len(a_words) + len(b_words)
             word_sim = len(common_words) * 2 / total_words if total_words > 0 else 0
             
-            # Combine similarities with adjusted weights
+            # Combine similarities with adjusted weights (removed keyword importance)
             combined = (
                 jaccard * 0.3 +          # Word overlap importance
-                sequence * 0.2 +         # Exact sequence matching
+                sequence * 0.3 +         # Exact sequence matching
                 word_order * 0.2 +       # Word order importance
-                word_sim * 0.3           # Word similarity
+                word_sim * 0.2           # Word similarity
             )
             
             return combined
@@ -262,6 +289,8 @@ class AIProcessor:
     def process_question(self, question: str) -> Dict:
         """Process a new question and generate an answer."""
         try:
+            print(f"\nProcessing question: {question}")
+            
             # Find similar questions
             similar_qa = self.find_similar_questions(question)
             
@@ -280,28 +309,55 @@ class AIProcessor:
             
             # Generate answer based on confidence level
             confidence = best_match['similarity']
-            answer = self.generate_answer(question, similar_qa)
+            print(f"Best match confidence: {confidence:.2%}")
             
-            # Add confidence indicator without disrupting the answer
-            confidence_note = ""
-            if confidence < 0.5:
-                confidence_note = " (Based on multiple similar questions with partial matches)"
-            elif confidence < 0.8:
-                confidence_note = " (Based on similar questions with good confidence)"
+            # For exact matches or very high confidence
+            if confidence >= 0.95:
+                return {
+                    'question': question,
+                    'answer': best_match['answer'],
+                    'confidence': confidence,
+                    'is_ai_generated': False,
+                    'similar_questions': similar_qa
+                }
             
-            # Only add confidence note if it's not a direct match
-            if confidence < 0.8:
-                # Check if answer ends with punctuation
-                if answer[-1] in '.!?':
-                    answer = answer[:-1] + confidence_note + answer[-1]
-                else:
-                    answer = answer + confidence_note + '.'
+            # Always try to generate a synthesized answer for other cases
+            print("Attempting to synthesize answer from multiple sources")
+            # Get all answers with similarity > 0.2
+            relevant_answers = [qa for qa in similar_qa if qa['similarity'] > 0.2]
             
+            if relevant_answers:
+                print(f"Found {len(relevant_answers)} relevant answers for synthesis")
+                synthesized_answer = self._synthesize_answer(question, relevant_answers)
+                
+                if synthesized_answer:
+                    confidence_note = ""
+                    if confidence < 0.5:
+                        confidence_note = " (Based on multiple similar questions)"
+                    elif confidence < 0.8:
+                        confidence_note = " (Based on closely related questions)"
+                    
+                    final_answer = synthesized_answer
+                    if confidence_note:
+                        if final_answer[-1] in '.!?':
+                            final_answer = final_answer[:-1] + confidence_note + final_answer[-1]
+                        else:
+                            final_answer += confidence_note + '.'
+                    
+                    return {
+                        'question': question,
+                        'answer': final_answer,
+                        'confidence': confidence,
+                        'is_ai_generated': True,
+                        'similar_questions': similar_qa
+                    }
+            
+            # If synthesis failed, return best match
             return {
                 'question': question,
-                'answer': answer,
+                'answer': best_match['answer'],
                 'confidence': confidence,
-                'is_ai_generated': confidence < 0.8,
+                'is_ai_generated': confidence < 0.95,  # Consider it AI-generated if not a very close match
                 'similar_questions': similar_qa
             }
             
@@ -313,4 +369,56 @@ class AIProcessor:
                 'confidence': 0.0,
                 'is_ai_generated': False,
                 'similar_questions': []
-            } 
+            }
+
+    def _synthesize_answer(self, question: str, similar_qa: List[Dict]) -> str:
+        """Synthesize an answer from multiple similar questions."""
+        try:
+            print(f"Synthesizing answer from {len(similar_qa)} similar questions")
+            
+            # Extract key terms from the question
+            question_words = set(re.findall(r'\b\w+\b', question.lower()))
+            
+            # Group similar answers
+            answer_groups = {}
+            for qa in similar_qa:
+                answer = qa['answer'].strip()
+                if answer.lower() == 'yes':
+                    answer_groups['yes'] = answer_groups.get('yes', 0) + qa['similarity']
+                elif answer.lower() == 'no':
+                    answer_groups['no'] = answer_groups.get('no', 0) + qa['similarity']
+                else:
+                    # For non-yes/no answers, use the answer as the key
+                    answer_groups[answer] = answer_groups.get(answer, 0) + qa['similarity']
+            
+            # If we have mostly yes/no answers
+            if 'yes' in answer_groups or 'no' in answer_groups:
+                total_weight = sum(answer_groups.values())
+                yes_weight = answer_groups.get('yes', 0)
+                no_weight = answer_groups.get('no', 0)
+                
+                if total_weight > 0:
+                    yes_ratio = yes_weight / total_weight
+                    no_ratio = no_weight / total_weight
+                    
+                    if yes_ratio > 0.6:
+                        return "Yes"
+                    elif no_ratio > 0.6:
+                        return "No"
+                    else:
+                        # If no clear majority, provide a nuanced answer
+                        return "Partially - depends on specific requirements and context"
+            
+            # For non-yes/no answers or mixed responses
+            # Sort answers by their combined similarity scores
+            sorted_answers = sorted(answer_groups.items(), key=lambda x: x[1], reverse=True)
+            
+            if sorted_answers:
+                # Return the answer with the highest combined similarity score
+                return sorted_answers[0][0]
+            
+            return None
+            
+        except Exception as e:
+            print(f"Error synthesizing answer: {e}")
+            return None 

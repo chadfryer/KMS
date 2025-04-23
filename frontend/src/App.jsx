@@ -284,19 +284,67 @@ function MainView({ onViewDatabase }) {
 
     setIsProcessing(true)
     setProcessingResults(null)
-    setProcessStatus(null)  // Reset process status instead of upload status
+    setProcessStatus(null)
 
     try {
+      const formData = new FormData()
+      
       // Read the file content
       const fileContent = await questionnaireFile.text()
-      const lines = fileContent.split('\n').map(line => line.trim()).filter(line => line)
       
-      if (lines.length === 0) {
+      // Parse CSV properly handling line breaks within fields
+      const rows = []
+      let inQuotes = false
+      let currentField = ''
+      let currentRow = []
+      
+      for (let i = 0; i < fileContent.length; i++) {
+        const char = fileContent[i]
+        const nextChar = fileContent[i + 1]
+        
+        if (char === '"') {
+          if (inQuotes && nextChar === '"') {
+            // Handle escaped quotes
+            currentField += '"'
+            i++ // Skip next quote
+          } else {
+            // Toggle quotes mode
+            inQuotes = !inQuotes
+          }
+        } else if (char === ',' && !inQuotes) {
+          // End of field
+          currentRow.push(currentField.trim())
+          currentField = ''
+        } else if (char === '\n' && !inQuotes) {
+          // End of row
+          currentRow.push(currentField.trim())
+          if (currentRow.some(field => field)) { // Only add non-empty rows
+            rows.push(currentRow)
+          }
+          currentField = ''
+          currentRow = []
+        } else if (char === '\r') {
+          // Skip carriage return
+          continue
+        } else {
+          currentField += char
+        }
+      }
+      
+      // Add the last field and row if exists
+      if (currentField) {
+        currentRow.push(currentField.trim())
+      }
+      if (currentRow.some(field => field)) {
+        rows.push(currentRow)
+      }
+
+      if (rows.length === 0) {
         throw new Error('CSV file is empty')
       }
 
       // Get and normalize headers
-      const headers = lines[0].split(',').map(h => h.trim().toLowerCase())
+      const headers = rows[0].map(h => h.trim().toLowerCase())
       
       // Check if we need to add required columns
       const hasQuestion = headers.some(h => h.includes('question'))
@@ -316,15 +364,22 @@ function MainView({ onViewDatabase }) {
         newHeaders.push('comment')
       }
 
-      // Create new CSV content
+      // Create new CSV content, properly escaping fields with quotes if they contain commas or line breaks
+      const escapeCsvField = (field) => {
+        if (field.includes(',') || field.includes('\n') || field.includes('"')) {
+          return `"${field.replace(/"/g, '""')}"` // Escape quotes by doubling them
+        }
+        return field
+      }
+
       const newLines = [
         newHeaders.join(','),
-        ...lines.slice(1).map(line => {
-          const values = line.split(',').map(v => v.trim())
+        ...rows.slice(1).map(row => {
+          const values = [...row]
           while (values.length < newHeaders.length) {
             values.push('')
           }
-          return values.join(',')
+          return values.map(escapeCsvField).join(',')
         })
       ]
       
@@ -334,7 +389,6 @@ function MainView({ onViewDatabase }) {
         type: 'text/csv'
       })
 
-      const formData = new FormData()
       formData.append('file', newFile)
 
       // Build URL with query parameters
@@ -361,7 +415,7 @@ function MainView({ onViewDatabase }) {
           opened: true,
           results: data.results
         })
-        setProcessStatus({  // Use process status instead of upload status
+        setProcessStatus({
           type: 'success',
           message: `Processed ${data.results.length} questions successfully`
         })
@@ -383,7 +437,7 @@ function MainView({ onViewDatabase }) {
       }
     } catch (error) {
       console.error('Error processing questionnaire:', error)
-      setProcessStatus({  // Use process status instead of upload status
+      setProcessStatus({
         type: 'error',
         message: error.message || 'Failed to process questionnaire. Please try again.'
       })
@@ -1063,27 +1117,26 @@ function MainView({ onViewDatabase }) {
             <Stack spacing="md">
               {processingResultsModal.results.map((result, index) => (
                 <Paper key={index} p="md" style={{ 
-                  backgroundColor: 'rgba(103, 215, 164, 0.1)',
-                  border: '1px solid #67D7A4'
+                  backgroundColor: result.best_match && result.best_match.is_ai_generated ? '#2D2D2D' : 'rgba(103, 215, 164, 0.1)',
+                  border: result.best_match && result.best_match.is_ai_generated ? '1px solid #2D2D2D' : '1px solid #67D7A4'
                 }}>
                   <Stack spacing="xs">
-                    <Text weight={600} c="#045944">Question:</Text>
-                    <Text c="#008363">{result.input_question}</Text>
+                    <Text weight={600} c={result.best_match && result.best_match.is_ai_generated ? '#AAFFD8' : '#045944'}>Question:</Text>
+                    <Text c={result.best_match && result.best_match.is_ai_generated ? '#FFFFFF' : '#008363'}>{result.input_question}</Text>
                     {result.best_match ? (
                       <>
                         {result.best_match.entity && (
                           <>
-                            <Text weight={600} c="#045944">Entity:</Text>
-                            <Text c="#008363">{result.best_match.entity}</Text>
+                            <Text weight={600} c={result.best_match.is_ai_generated ? '#AAFFD8' : '#045944'}>Entity:</Text>
+                            <Text c={result.best_match.is_ai_generated ? '#FFFFFF' : '#008363'}>{result.best_match.entity}</Text>
                           </>
                         )}
-                        <Text weight={600} c="#045944">Matched Answer:</Text>
-                        <Text c="#008363">{result.best_match.answer_key}</Text>
-                        <Text size="sm" c="dimmed">Similarity: {(result.best_match.similarity * 100).toFixed(1)}%</Text>
+                        <Text weight={600} c={result.best_match.is_ai_generated ? '#AAFFD8' : '#045944'}>Matched Answer:</Text>
+                        <Text c={result.best_match.is_ai_generated ? '#FFFFFF' : '#008363'}>{result.best_match.answer_key}</Text>
                         {result.best_match.comment && (
                           <>
-                            <Text weight={600} c="#045944">Comment:</Text>
-                            <Text c="#008363">{result.best_match.comment}</Text>
+                            <Text weight={600} c={result.best_match.is_ai_generated ? '#AAFFD8' : '#045944'}>Comment:</Text>
+                            <Text c={result.best_match.is_ai_generated ? '#FFFFFF' : '#008363'}>{result.best_match.comment}</Text>
                           </>
                         )}
                       </>

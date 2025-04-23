@@ -75,11 +75,9 @@ def init_db():
     This will create the database file and tables if they don't exist.
     """
     try:
-        # Drop all tables to ensure clean schema
-        Base.metadata.drop_all(bind=engine)
-        # Create all tables with the new schema
+        # Only create tables if they don't exist
         Base.metadata.create_all(bind=engine)
-        print("Database initialized successfully with new schema")
+        print("Database initialized successfully")
     except Exception as e:
         print(f"Error initializing database: {str(e)}")
         raise
@@ -281,12 +279,18 @@ async def upload_csv(file: list[UploadFile] = File(description="Multiple files a
             # Normalize column names and remove BOM
             fieldnames = [name.strip().lower().replace('\ufeff', '') for name in reader.fieldnames] if reader.fieldnames else []
             
+            # Create a mapping of normalized field names to original field names
+            field_mapping = {}
+            for original_name in reader.fieldnames:
+                normalized_name = original_name.strip().lower().replace('\ufeff', '')
+                field_mapping[normalized_name] = original_name
+            
             # Validate required columns
             if 'question' not in fieldnames or 'answer_key' not in fieldnames:
                 results.append({
                     "file": f.filename,
                     "status": "error",
-                    "message": f"CSV must contain 'question' and 'answer_key' columns. 'entity' is optional. Found columns: {fieldnames}"
+                    "message": f"CSV must contain 'question' and 'answer_key' columns. 'entity' and 'comment' are optional. Found columns: {fieldnames}"
                 })
                 continue
             
@@ -296,37 +300,38 @@ async def upload_csv(file: list[UploadFile] = File(description="Multiple files a
             
             try:
                 for row in reader:
-                    # Normalize row data
-                    normalized_row = {k.strip().lower().replace('\ufeff', ''): v.strip() if isinstance(v, str) else v 
-                                    for k, v in row.items()}
+                    # Create a new dict with normalized keys
+                    normalized_row = {}
+                    for norm_key, orig_key in field_mapping.items():
+                        if orig_key in row:
+                            normalized_row[norm_key] = row[orig_key].strip() if isinstance(row[orig_key], str) else row[orig_key]
                     
                     question = normalized_row.get('question', '')
                     answer_key = normalized_row.get('answer_key', '')
                     entity = normalized_row.get('entity', '')
                     comment = normalized_row.get('comment', '')
                     
-                    if comment == '':
-                        comment = None
+                    if not question or not answer_key:
+                        continue
                     
-                    if question and answer_key:
-                        # Check for duplicates
-                        similar_q = find_similar_question(db, question)
-                        if similar_q:
-                            duplicates.append({
-                                "question": question,
-                                "similar_to": similar_q.to_dict()
-                            })
-                            total_duplicates += 1
-                            continue
-                        
-                        new_questionnaire = Questionnaire(
-                            question=question,
-                            answer_key=answer_key,
-                            entity=entity,
-                            comment=comment
-                        )
-                        db.add(new_questionnaire)
-                        questionnaires.append(new_questionnaire)
+                    # Check for duplicates
+                    similar_q = find_similar_question(db, question)
+                    if similar_q:
+                        duplicates.append({
+                            "question": question,
+                            "similar_to": similar_q.to_dict()
+                        })
+                        total_duplicates += 1
+                        continue
+                    
+                    new_questionnaire = Questionnaire(
+                        question=question,
+                        answer_key=answer_key,
+                        entity=entity if entity else None,
+                        comment=comment if comment else None
+                    )
+                    db.add(new_questionnaire)
+                    questionnaires.append(new_questionnaire)
                 
                 db.commit()
                 for q in questionnaires:
@@ -409,42 +414,63 @@ async def process_questionnaire(file: UploadFile = File(...), threshold: float =
             content_str = content_str[1:]
         
         csv_file = io.StringIO(content_str)
-        reader = csv.DictReader(csv_file)
+        reader = csv.reader(csv_file)
         
-        # Store original fieldnames for output
-        original_fieldnames = reader.fieldnames
-        
-        # Normalize column names
-        fieldnames = [name.strip().lower().replace('\ufeff', '') for name in reader.fieldnames] if reader.fieldnames else []
-        
-        # Validate CSV structure
-        if not fieldnames:
+        # Get headers and normalize them
+        headers = next(reader, None)
+        if not headers:
             return JSONResponse(
                 status_code=400,
                 content={"message": "CSV file is empty or has no headers"}
             )
         
-        # Process questions and find matches
+        # Normalize headers and create mapping
+        normalized_headers = [h.strip().lower().replace('\ufeff', '') for h in headers]
+        header_mapping = dict(zip(normalized_headers, headers))
+        
+        # Find required column indices
+        question_idx = None
+        answer_idx = None
+        comment_idx = None
+        
+        for idx, header in enumerate(normalized_headers):
+            if 'question' in header:
+                question_idx = idx
+            elif 'answer' in header:
+                answer_idx = idx
+            elif 'comment' in header:
+                comment_idx = idx
+        
+        if question_idx is None:
+            return JSONResponse(
+                status_code=400,
+                content={"message": "CSV must contain a 'question' column"}
+            )
+        
+        # Process rows
         questions = []
         rows = []
         for row in reader:
-            rows.append(row)
-            normalized_row = {k.strip().lower().replace('\ufeff', ''): v.strip() if isinstance(v, str) else v 
-                            for k, v in row.items()}
+            if not row:  # Skip empty rows
+                continue
             
-            question_col = next((col for col in fieldnames if 'question' in col), None)
-            if not question_col:
-                return JSONResponse(
-                    status_code=400,
-                    content={"message": "CSV must contain a 'question' column"}
-                )
+            # Create a dict for the row
+            row_dict = {}
+            for idx, value in enumerate(row):
+                if idx < len(headers):
+                    row_dict[headers[idx]] = value.strip() if isinstance(value, str) else value
             
-            question = normalized_row.get(question_col, '')
+            rows.append(row_dict)
+            
+            question = row[question_idx].strip() if question_idx < len(row) else ''
+            answer = row[answer_idx].strip() if answer_idx is not None and answer_idx < len(row) else ''
+            comment = row[comment_idx].strip() if comment_idx is not None and comment_idx < len(row) else ''
+            
             if question:
                 questions.append({
                     'question': question,
-                    'answer': normalized_row.get('answer_key', ''),
-                    'comment': normalized_row.get('comment', '')
+                    'answer': answer,
+                    'comment': comment
                 })
         
         if not questions:
@@ -453,7 +479,7 @@ async def process_questionnaire(file: UploadFile = File(...), threshold: float =
                 content={"message": "No questions found in the CSV file"}
             )
         
-        # Find matches in database
+        # Find matches in database using AI processor
         db = SessionLocal()
         try:
             results = []
@@ -469,29 +495,21 @@ async def process_questionnaire(file: UploadFile = File(...), threshold: float =
                         "similarity": 1.0
                     }
                 else:
-                    # If no existing answer, try to find a match
-                    db_questions = db.query(Questionnaire)
+                    # Use AI processor to find matches and generate answer
+                    ai_result = ai_processor.process_question(q['question'])
+                    print(f"AI Result for question '{q['question']}': {ai_result}")  # Debug print
                     
-                    # Apply entity filter if specified
-                    if entity and entity.strip():
-                        db_questions = db_questions.filter(Questionnaire.entity == entity.strip())
-                    
-                    db_questions = db_questions.all()
-                    
-                    similar_questions = []
-                    for db_q in db_questions:
-                        similarity = similar(q['question'], db_q.question)
-                        if similarity >= threshold:
-                            similar_questions.append({
-                                "question": db_q.question,
-                                "answer_key": db_q.answer_key,
-                                "comment": db_q.comment,
-                                "similarity": similarity,
-                                "entity": db_q.entity
-                            })
-                    
-                    similar_questions.sort(key=lambda x: x["similarity"], reverse=True)
-                    best_match = similar_questions[0] if similar_questions else None
+                    if ai_result.get('answer') and ai_result.get('answer') != "No similar questions found in the knowledge base.":
+                        best_match = {
+                            "question": q['question'],
+                            "answer_key": ai_result['answer'],
+                            "comment": f"Confidence: {ai_result['confidence']:.2%}",
+                            "similarity": ai_result['confidence'],
+                            "similar_questions": ai_result.get('similar_questions', [])
+                        }
+                    else:
+                        best_match = None
+                        print(f"No valid answer found for question: {q['question']}")  # Debug print
                 
                 results.append({
                     "input_question": q['question'],
@@ -501,14 +519,19 @@ async def process_questionnaire(file: UploadFile = File(...), threshold: float =
                 # Update row with match
                 updated_row = rows[i].copy()
                 if best_match:
-                    updated_row['answer_key'] = best_match['answer_key']
-                    if best_match['comment']:
-                        updated_row['comment'] = best_match['comment']
+                    # Find the answer key column in the original headers
+                    answer_key_header = next((h for h in headers if 'answer' in h.lower()), None)
+                    comment_header = next((h for h in headers if 'comment' in h.lower()), None)
+                    
+                    if answer_key_header:
+                        updated_row[answer_key_header] = best_match['answer_key']
+                    if comment_header and best_match['comment']:
+                        updated_row[comment_header] = best_match['comment']
                 updated_rows.append(updated_row)
             
             # Create updated CSV
             output = io.StringIO()
-            writer = csv.DictWriter(output, fieldnames=original_fieldnames)
+            writer = csv.DictWriter(output, fieldnames=headers)
             writer.writeheader()
             writer.writerows(updated_rows)
             
@@ -586,22 +609,36 @@ async def search_questions(query: str, entity: str = None):
     finally:
         db.close()
 
-@app.route('/api/generate-answer', methods=['POST'])
-def generate_answer():
+@app.post("/api/generate-answer")
+async def generate_answer(request: Request):
+    """
+    Generate an answer for a given question using AI processing.
+    
+    Args:
+        request (Request): The request object containing the question
+        
+    Returns:
+        dict: Generated answer and related information
+    """
     try:
-        data = request.get_json()
+        data = await request.json()
         question = data.get('question')
         
         if not question:
-            return jsonify({'error': 'Question is required'}), 400
+            return JSONResponse(
+                status_code=400,
+                content={"error": "Question is required"}
+            )
         
         # Process the question using AI
         result = ai_processor.process_question(question)
-        
-        return jsonify(result)
+        return result
     
     except Exception as e:
-        return jsonify({'error': str(e)}), 500
+        return JSONResponse(
+            status_code=500,
+            content={"error": str(e)}
+        )
 
 if __name__ == "__main__":
     import uvicorn

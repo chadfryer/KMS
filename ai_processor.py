@@ -122,33 +122,94 @@ class AIProcessor:
             return "No similar questions found in the knowledge base."
         
         try:
+            # Sort by similarity
+            similar_qa.sort(key=lambda x: x['similarity'], reverse=True)
+            best_match = similar_qa[0]
+            
             # If we have a high confidence match, use it directly
-            best_match = max(similar_qa, key=lambda x: x['similarity'])
-            if best_match['similarity'] > 0.6:
+            if best_match['similarity'] > 0.8:
                 return best_match['answer']
             
-            # For lower confidence matches, try to synthesize an answer
-            # Extract key phrases from similar answers
-            answer_words = []
-            for qa in similar_qa:
-                answer_words.extend(re.findall(r'\b\w+\b', qa['answer'].lower()))
+            # For medium confidence, combine information from top matches
+            elif best_match['similarity'] > 0.5:
+                # Get top 3 most similar answers
+                top_answers = [qa['answer'] for qa in similar_qa[:3] if qa['similarity'] > 0.3]
+                
+                if not top_answers:
+                    return best_match['answer']
+                
+                # Extract key information from answers
+                key_phrases = []
+                for answer in top_answers:
+                    # Split into sentences and clean
+                    sentences = [s.strip() for s in answer.split('.') if s.strip()]
+                    key_phrases.extend(sentences)
+                
+                # Remove duplicates while preserving order
+                seen = set()
+                unique_phrases = []
+                for phrase in key_phrases:
+                    if phrase.lower() not in seen:
+                        seen.add(phrase.lower())
+                        unique_phrases.append(phrase)
+                
+                # Combine unique phrases into a coherent answer
+                synthesized_answer = '. '.join(unique_phrases)
+                if not synthesized_answer.endswith('.'):
+                    synthesized_answer += '.'
+                
+                return synthesized_answer
             
-            # Count word frequencies
-            word_freq = Counter(answer_words)
-            
-            # Get the most common words/phrases (excluding stop words)
-            stop_words = {'the', 'a', 'an', 'and', 'or', 'but', 'in', 'on', 'at', 'to', 'for', 'of', 'with', 'by'}
-            key_terms = [word for word, _ in word_freq.most_common(10) if word not in stop_words]
-            
-            # Use the best match as a template but indicate lower confidence
-            answer = best_match['answer']
-            confidence_note = "\n\nNote: This answer is based on similar questions with moderate confidence."
-            
-            return answer + confidence_note
+            # For low confidence matches, try to extract relevant information
+            else:
+                # Get all answers with similarity > 0.2
+                relevant_answers = [qa['answer'] for qa in similar_qa if qa['similarity'] > 0.2]
+                
+                if not relevant_answers:
+                    return best_match['answer']
+                
+                # Extract common words/phrases (excluding stop words)
+                stop_words = {'the', 'a', 'an', 'and', 'or', 'but', 'in', 'on', 'at', 'to', 'for', 'of', 'with', 'by'}
+                word_freq = Counter()
+                
+                for answer in relevant_answers:
+                    # Split into words and clean
+                    words = re.findall(r'\b\w+\b', answer.lower())
+                    # Add non-stop words to frequency counter
+                    word_freq.update([w for w in words if w not in stop_words])
+                
+                # Get most common terms
+                common_terms = [word for word, _ in word_freq.most_common(10)]
+                
+                # Extract sentences containing common terms
+                relevant_sentences = []
+                for answer in relevant_answers:
+                    sentences = [s.strip() for s in answer.split('.') if s.strip()]
+                    for sentence in sentences:
+                        # Check if sentence contains any common terms
+                        if any(term in sentence.lower() for term in common_terms):
+                            relevant_sentences.append(sentence)
+                
+                # Remove duplicates while preserving order
+                seen = set()
+                unique_sentences = []
+                for sentence in relevant_sentences:
+                    if sentence.lower() not in seen:
+                        seen.add(sentence.lower())
+                        unique_sentences.append(sentence)
+                
+                # Combine relevant sentences
+                if unique_sentences:
+                    synthesized_answer = '. '.join(unique_sentences)
+                    if not synthesized_answer.endswith('.'):
+                        synthesized_answer += '.'
+                    return synthesized_answer
+                
+                return best_match['answer']
             
         except Exception as e:
             print(f"Error generating answer: {e}")
-            return "Error generating answer. Please try again."
+            return best_match['answer'] if best_match else "Error generating answer. Please try again."
 
     def process_question(self, question: str) -> Dict:
         """Process a new question and generate an answer."""
@@ -165,22 +226,32 @@ class AIProcessor:
                     'similar_questions': []
                 }
             
-            # Get the best match
-            best_match = max(similar_qa, key=lambda x: x['similarity'])
+            # Sort by similarity
+            similar_qa.sort(key=lambda x: x['similarity'], reverse=True)
+            best_match = similar_qa[0]
             
-            # Calculate overall confidence
+            # Generate answer based on confidence level
             confidence = best_match['similarity']
+            answer = self.generate_answer(question, similar_qa)
             
-            # Always return the best matching answer, but indicate confidence level
+            # Add confidence indicator without disrupting the answer
             confidence_note = ""
             if confidence < 0.5:
-                confidence_note = "\n\nNote: This answer is based on similar questions with low confidence."
+                confidence_note = " (Based on multiple similar questions with partial matches)"
             elif confidence < 0.8:
-                confidence_note = "\n\nNote: This answer is based on similar questions with moderate confidence."
+                confidence_note = " (Based on similar questions with good confidence)"
+            
+            # Only add confidence note if it's not a direct match
+            if confidence < 0.8:
+                # Check if answer ends with punctuation
+                if answer[-1] in '.!?':
+                    answer = answer[:-1] + confidence_note + answer[-1]
+                else:
+                    answer = answer + confidence_note + '.'
             
             return {
                 'question': question,
-                'answer': best_match['answer'] + confidence_note,
+                'answer': answer,
                 'confidence': confidence,
                 'is_ai_generated': confidence < 0.8,
                 'similar_questions': similar_qa

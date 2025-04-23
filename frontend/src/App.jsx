@@ -286,8 +286,55 @@ function MainView({ onViewDatabase }) {
     setUploadStatus(null)
 
     try {
+      // Read the file content
+      const fileContent = await questionnaireFile.text()
+      const lines = fileContent.split('\n').map(line => line.trim()).filter(line => line)
+      
+      if (lines.length === 0) {
+        throw new Error('CSV file is empty')
+      }
+
+      // Get and normalize headers
+      const headers = lines[0].split(',').map(h => h.trim().toLowerCase())
+      
+      // Check if we need to add required columns
+      const hasQuestion = headers.some(h => h.includes('question'))
+      const hasAnswer = headers.some(h => h.includes('answer'))
+      const hasComment = headers.some(h => h.includes('comment'))
+      
+      if (!hasQuestion) {
+        throw new Error('CSV must contain a question column')
+      }
+
+      // Create new CSV content with required columns
+      let newHeaders = [...headers]
+      if (!hasAnswer) {
+        newHeaders.push('answer')
+      }
+      if (!hasComment) {
+        newHeaders.push('comment')
+      }
+
+      // Create new CSV content
+      const newLines = [
+        newHeaders.join(','),
+        ...lines.slice(1).map(line => {
+          const values = line.split(',').map(v => v.trim())
+          while (values.length < newHeaders.length) {
+            values.push('')
+          }
+          return values.join(',')
+        })
+      ]
+      
+      // Create new file with modified content
+      const newContent = newLines.join('\n')
+      const newFile = new File([newContent], questionnaireFile.name, {
+        type: 'text/csv'
+      })
+
       const formData = new FormData()
-      formData.append('file', questionnaireFile)
+      formData.append('file', newFile)
 
       // Build URL with query parameters
       const url = new URL('http://localhost:8000/process-questionnaire')

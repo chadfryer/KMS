@@ -25,6 +25,7 @@ import json
 from datetime import datetime
 from ai_processor import AIProcessor
 import re
+import pandas as pd
 
 # Database configuration
 SQLALCHEMY_DATABASE_URL = "sqlite:///./questionnaire.db"
@@ -388,11 +389,11 @@ async def process_questionnaire(file: UploadFile = File(...), threshold: float =
         )
     
     try:
-        # Read and decode file content
+        # Read the file content
         content = await file.read()
-        content_str = None
         
-        # Try different encodings, prioritizing utf-8-sig for BOM handling
+        # Try different encodings
+        content_str = None
         for encoding in ['utf-8-sig', 'utf-8', 'latin1', 'cp1252']:
             try:
                 content_str = content.decode(encoding)
@@ -406,40 +407,35 @@ async def process_questionnaire(file: UploadFile = File(...), threshold: float =
                 content={"message": "Could not decode the CSV file"}
             )
         
-        # Process CSV content
-        content_str = content_str.replace('\r\n', '\n').replace('\r', '\n')
+        # Split into lines and clean up
+        lines = [line.strip() for line in content_str.split('\n') if line.strip()]
+        if not lines:
+            return JSONResponse(
+                status_code=400,
+                content={"message": "CSV file is empty"}
+            )
         
-        # Remove BOM if present
-        if content_str.startswith('\ufeff'):
-            content_str = content_str[1:]
-        
-        csv_file = io.StringIO(content_str)
-        reader = csv.reader(csv_file)
-        
-        # Get headers and normalize them
-        headers = next(reader, None)
+        # Get headers
+        headers = [h.strip() for h in lines[0].split(',')]
         if not headers:
             return JSONResponse(
                 status_code=400,
-                content={"message": "CSV file is empty or has no headers"}
+                content={"message": "CSV file has no headers"}
             )
         
-        # Normalize headers and create mapping
-        normalized_headers = [h.strip().lower().replace('\ufeff', '') for h in headers]
-        header_mapping = dict(zip(normalized_headers, headers))
-        
-        # Find required column indices
+        # Find required columns
         question_idx = None
         answer_idx = None
         comment_idx = None
         
-        for idx, header in enumerate(normalized_headers):
-            if 'question' in header:
-                question_idx = idx
-            elif 'answer' in header:
-                answer_idx = idx
-            elif 'comment' in header:
-                comment_idx = idx
+        for i, header in enumerate(headers):
+            header_lower = header.lower()
+            if 'question' in header_lower:
+                question_idx = i
+            elif 'answer' in header_lower:
+                answer_idx = i
+            elif 'comment' in header_lower:
+                comment_idx = i
         
         if question_idx is None:
             return JSONResponse(
@@ -447,24 +443,41 @@ async def process_questionnaire(file: UploadFile = File(...), threshold: float =
                 content={"message": "CSV must contain a 'question' column"}
             )
         
+        # Ensure we have all necessary columns in headers
+        if answer_idx is None:
+            headers.append('answer')
+            answer_idx = len(headers) - 1
+        
+        if comment_idx is None:
+            headers.append('comment')
+            comment_idx = len(headers) - 1
+        
         # Process rows
         questions = []
         rows = []
-        for row in reader:
-            if not row:  # Skip empty rows
-                continue
+        
+        for line in lines[1:]:  # Skip header
+            # Split the line and clean values
+            values = [v.strip() for v in line.split(',')]
             
-            # Create a dict for the row
+            # Ensure we have enough values for all columns
+            while len(values) < len(headers):
+                values.append('')
+            
+            # Create a dict for this row
             row_dict = {}
-            for idx, value in enumerate(row):
-                if idx < len(headers):
-                    row_dict[headers[idx]] = value.strip() if isinstance(value, str) else value
+            for i, header in enumerate(headers):
+                if i < len(values):
+                    row_dict[header] = values[i]
+                else:
+                    row_dict[header] = ''
             
             rows.append(row_dict)
             
-            question = row[question_idx].strip() if question_idx < len(row) else ''
-            answer = row[answer_idx].strip() if answer_idx is not None and answer_idx < len(row) else ''
-            comment = row[comment_idx].strip() if comment_idx is not None and comment_idx < len(row) else ''
+            # Get values for this row
+            question = values[question_idx] if question_idx < len(values) else ''
+            answer = values[answer_idx] if answer_idx < len(values) else ''
+            comment = values[comment_idx] if comment_idx < len(values) else ''
             
             if question:
                 questions.append({
@@ -483,9 +496,8 @@ async def process_questionnaire(file: UploadFile = File(...), threshold: float =
         db = SessionLocal()
         try:
             results = []
-            updated_rows = []
             
-            for i, q in enumerate(questions):
+            for q in questions:
                 # First check if there's an existing answer
                 if q['answer']:
                     best_match = {
@@ -516,26 +528,24 @@ async def process_questionnaire(file: UploadFile = File(...), threshold: float =
                     "best_match": best_match
                 })
                 
-                # Update row with match
-                updated_row = rows[i].copy()
-                if best_match:
-                    # Find the answer key column in the original headers
-                    answer_key_header = next((h for h in headers if 'answer' in h.lower()), None)
-                    comment_header = next((h for h in headers if 'comment' in h.lower()), None)
-                    
-                    if answer_key_header:
-                        updated_row[answer_key_header] = best_match['answer_key']
-                    if comment_header and best_match['comment']:
-                        updated_row[comment_header] = best_match['comment']
-                updated_rows.append(updated_row)
+                # Update the row with the match
+                for row in rows:
+                    if row[headers[question_idx]] == q['question']:
+                        if best_match:
+                            if answer_idx is not None:
+                                row[headers[answer_idx]] = best_match['answer_key']
+                            if comment_idx is not None:
+                                row[headers[comment_idx]] = best_match['comment']
+                        break
             
-            # Create updated CSV
-            output = io.StringIO()
-            writer = csv.DictWriter(output, fieldnames=headers)
-            writer.writeheader()
-            writer.writerows(updated_rows)
+            # Create output CSV content
+            output_lines = [','.join(headers)]  # Start with headers
+            for row in rows:
+                # Get values in the same order as headers
+                values = [str(row.get(h, '')) for h in headers]
+                output_lines.append(','.join(values))
             
-            csv_content = output.getvalue()
+            csv_content = '\n'.join(output_lines)
             
             return {
                 "results": results,

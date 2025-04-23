@@ -79,8 +79,19 @@ class AIProcessor:
             b_word_list = b_clean.split()
             word_order = SequenceMatcher(None, a_word_list, b_word_list).ratio()
             
-            # Combine similarities with weights
-            combined = (jaccard * 0.4) + (sequence * 0.3) + (word_order * 0.3)
+            # Calculate word embedding similarity (using word overlap as a simple approximation)
+            common_words = a_words.intersection(b_words)
+            total_words = len(a_words) + len(b_words)
+            word_sim = len(common_words) * 2 / total_words if total_words > 0 else 0
+            
+            # Combine similarities with adjusted weights
+            combined = (
+                jaccard * 0.3 +          # Word overlap importance
+                sequence * 0.2 +         # Exact sequence matching
+                word_order * 0.2 +       # Word order importance
+                word_sim * 0.3           # Word similarity
+            )
+            
             return combined
             
         except Exception as e:
@@ -91,27 +102,44 @@ class AIProcessor:
         """Find similar questions in the knowledge base."""
         try:
             if not self.questions:
+                print("Warning: No questions loaded in knowledge base")
                 return []
                 
+            print(f"\nProcessing query: {query}")
+            print(f"Total questions in knowledge base: {len(self.questions)}")
+            
             # Calculate similarities
-            similarities = [(i, self._calculate_similarity(query, q)) 
-                          for i, q in enumerate(self.questions)]
+            similarities = []
+            for i, q in enumerate(self.questions):
+                similarity = self._calculate_similarity(query, q)
+                similarities.append((i, similarity))
+                if similarity > 0.2:  # Debug print for potentially relevant matches
+                    print(f"Potential match found:")
+                    print(f"Q: {q}")
+                    print(f"Similarity: {similarity:.2%}")
             
             # Sort by similarity
             similarities.sort(key=lambda x: x[1], reverse=True)
             
-            # Get top k results
+            # Get top k results with any similarity (removed minimum threshold)
             results = []
             for i, similarity in similarities[:k]:
-                if similarity > 0.15:  # Lower threshold to 15% for more matches
-                    results.append({
-                        'id': self.ids[i],
-                        'question': self.questions[i],
-                        'answer': self.answers[i],
-                        'similarity': float(similarity)
-                    })
+                # Include all matches for analysis
+                results.append({
+                    'id': self.ids[i],
+                    'question': self.questions[i],
+                    'answer': self.answers[i],
+                    'similarity': float(similarity)
+                })
+                
+            print(f"\nFound {len(results)} matches:")
+            for r in results:
+                print(f"Match (similarity: {r['similarity']:.2%}):")
+                print(f"Q: {r['question']}")
+                print(f"A: {r['answer']}\n")
             
             return results
+            
         except Exception as e:
             print(f"Error finding similar questions: {e}")
             return []
@@ -122,21 +150,31 @@ class AIProcessor:
             return "No similar questions found in the knowledge base."
         
         try:
+            print(f"\nGenerating answer for: {question}")
+            print(f"Working with {len(similar_qa)} similar questions")
+            
             # Sort by similarity
             similar_qa.sort(key=lambda x: x['similarity'], reverse=True)
             best_match = similar_qa[0]
             
+            print(f"Best match similarity: {best_match['similarity']:.2%}")
+            
             # If we have a high confidence match, use it directly
             if best_match['similarity'] > 0.8:
+                print("Using high confidence match directly")
                 return best_match['answer']
             
             # For medium confidence, combine information from top matches
             elif best_match['similarity'] > 0.5:
+                print("Using medium confidence synthesis")
                 # Get top 3 most similar answers
                 top_answers = [qa['answer'] for qa in similar_qa[:3] if qa['similarity'] > 0.3]
                 
                 if not top_answers:
+                    print("No suitable answers found for medium confidence synthesis")
                     return best_match['answer']
+                
+                print(f"Synthesizing from {len(top_answers)} answers")
                 
                 # Extract key information from answers
                 key_phrases = []
@@ -158,15 +196,20 @@ class AIProcessor:
                 if not synthesized_answer.endswith('.'):
                     synthesized_answer += '.'
                 
+                print(f"Synthesized answer: {synthesized_answer}")
                 return synthesized_answer
             
             # For low confidence matches, try to extract relevant information
             else:
+                print("Using low confidence synthesis")
                 # Get all answers with similarity > 0.2
                 relevant_answers = [qa['answer'] for qa in similar_qa if qa['similarity'] > 0.2]
                 
                 if not relevant_answers:
+                    print("No relevant answers found for low confidence synthesis")
                     return best_match['answer']
+                
+                print(f"Found {len(relevant_answers)} relevant answers for synthesis")
                 
                 # Extract common words/phrases (excluding stop words)
                 stop_words = {'the', 'a', 'an', 'and', 'or', 'but', 'in', 'on', 'at', 'to', 'for', 'of', 'with', 'by'}
@@ -180,6 +223,7 @@ class AIProcessor:
                 
                 # Get most common terms
                 common_terms = [word for word, _ in word_freq.most_common(10)]
+                print(f"Common terms identified: {common_terms}")
                 
                 # Extract sentences containing common terms
                 relevant_sentences = []
@@ -198,13 +242,17 @@ class AIProcessor:
                         seen.add(sentence.lower())
                         unique_sentences.append(sentence)
                 
+                print(f"Found {len(unique_sentences)} unique relevant sentences")
+                
                 # Combine relevant sentences
                 if unique_sentences:
                     synthesized_answer = '. '.join(unique_sentences)
                     if not synthesized_answer.endswith('.'):
                         synthesized_answer += '.'
+                    print(f"Synthesized answer: {synthesized_answer}")
                     return synthesized_answer
                 
+                print("Falling back to best match answer")
                 return best_match['answer']
             
         except Exception as e:

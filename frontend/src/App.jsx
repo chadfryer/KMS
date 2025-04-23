@@ -71,6 +71,7 @@ function MainView({ onViewDatabase }) {
   const [selectedEntity, setSelectedEntity] = useState('')
   const [questionnaires, setQuestionnaires] = useState([])
   const [isLoading, setIsLoading] = useState(true)
+  const [processStatus, setProcessStatus] = useState(null)  // New state for process questionnaire status
 
   // Modal state management
   const [duplicatesModal, setDuplicatesModal] = useState({
@@ -283,7 +284,7 @@ function MainView({ onViewDatabase }) {
 
     setIsProcessing(true)
     setProcessingResults(null)
-    setUploadStatus(null)
+    setProcessStatus(null)  // Reset process status instead of upload status
 
     try {
       // Read the file content
@@ -360,7 +361,7 @@ function MainView({ onViewDatabase }) {
           opened: true,
           results: data.results
         })
-        setUploadStatus({
+        setProcessStatus({  // Use process status instead of upload status
           type: 'success',
           message: `Processed ${data.results.length} questions successfully`
         })
@@ -382,7 +383,7 @@ function MainView({ onViewDatabase }) {
       }
     } catch (error) {
       console.error('Error processing questionnaire:', error)
-      setUploadStatus({
+      setProcessStatus({  // Use process status instead of upload status
         type: 'error',
         message: error.message || 'Failed to process questionnaire. Please try again.'
       })
@@ -950,6 +951,14 @@ function MainView({ onViewDatabase }) {
                       Clear Selection
                     </Button>
                   </Group>
+                )}
+                {processStatus && (  // Show process status instead of upload status
+                  <Text
+                    color={processStatus.type === 'success' ? 'green' : 'red'}
+                    size="sm"
+                  >
+                    {processStatus.message}
+                  </Text>
                 )}
               </Stack>
             </Paper>

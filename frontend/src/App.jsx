@@ -288,11 +288,14 @@ function MainView({ onViewDatabase }) {
     try {
       const formData = new FormData()
       formData.append('file', questionnaireFile)
+
+      // Build URL with query parameters
+      const url = new URL('http://localhost:8000/process-questionnaire')
       if (selectedEntity) {
-        formData.append('entity', selectedEntity)
+        url.searchParams.append('entity', selectedEntity)
       }
 
-      const response = await fetch('http://localhost:8000/process-questionnaire', {
+      const response = await fetch(url.toString(), {
         method: 'POST',
         body: formData,
       })

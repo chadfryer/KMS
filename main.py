@@ -482,15 +482,13 @@ async def process_questionnaire(file: UploadFile = File(...), threshold: float =
                     for db_q in db_questions:
                         similarity = similar(q['question'], db_q.question)
                         if similarity >= threshold:
-                            # Only include matches from the selected entity
-                            if not entity or (entity and db_q.entity == entity.strip()):
-                                similar_questions.append({
-                                    "question": db_q.question,
-                                    "answer_key": db_q.answer_key,
-                                    "comment": db_q.comment,
-                                    "similarity": similarity,
-                                    "entity": db_q.entity
-                                })
+                            similar_questions.append({
+                                "question": db_q.question,
+                                "answer_key": db_q.answer_key,
+                                "comment": db_q.comment,
+                                "similarity": similarity,
+                                "entity": db_q.entity
+                            })
                     
                     similar_questions.sort(key=lambda x: x["similarity"], reverse=True)
                     best_match = similar_questions[0] if similar_questions else None

@@ -301,6 +301,52 @@ function DatabaseView({ onBack }) {
               </div>
             ))}
           </Stack>
+          
+          {/* Add pagination controls */}
+          {totalPages > 1 && (
+            <div style={{ 
+              display: 'flex', 
+              justifyContent: 'center',
+              marginTop: '20px',
+              padding: '20px 0',
+              borderTop: '1px solid #67D7A4'
+            }}>
+              <Pagination
+                value={currentPage}
+                onChange={setCurrentPage}
+                total={totalPages}
+                color="juniper"
+                radius="md"
+                withEdges
+                styles={{
+                  control: {
+                    '&[data-active]': {
+                      backgroundColor: '#008363',
+                      borderColor: '#008363',
+                      '&:not(:disabled):hover': {
+                        backgroundColor: '#045944',
+                      },
+                    },
+                    '&:not(:disabled):hover': {
+                      backgroundColor: 'rgba(103, 215, 164, 0.1)',
+                    },
+                  }
+                }}
+              />
+            </div>
+          )}
+          
+          {/* Add total results count */}
+          <Text 
+            size="sm" 
+            c="dimmed" 
+            style={{ 
+              textAlign: 'center',
+              marginTop: '10px'
+            }}
+          >
+            Showing {paginatedQuestions.length} of {sortedQuestions.length} results
+          </Text>
         </Paper>
       </Stack>
     </Container>

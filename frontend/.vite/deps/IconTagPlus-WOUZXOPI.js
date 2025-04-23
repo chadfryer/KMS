@@ -1,0 +1,8 @@
+import {
+  IconTagPlus
+} from "./chunk-ORASRFMD.js";
+import "./chunk-U6FOTBXV.js";
+import "./chunk-3A6WRQ5K.js";
+export {
+  IconTagPlus as default
+};

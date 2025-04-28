@@ -140,10 +140,10 @@ function DatabaseView({ onBack }) {
           </Badge>
         </Group>
 
-        <Paper p="xl" radius="lg" withBorder>
-          <Stack spacing="lg">
+        <Paper p={40} radius="lg" withBorder mb={40}>
+          <Stack spacing={40}>
             <form onSubmit={handleSearch}>
-              <Stack spacing="md">
+              <Stack spacing={40}>
                 <TextInput
                   placeholder="Search questions..."
                   value={searchQuery}
@@ -201,15 +201,15 @@ function DatabaseView({ onBack }) {
         </Paper>
 
         {isLoading ? (
-          <Paper p="xl" radius="lg" withBorder>
-            <Stack align="center" spacing="md" py={40}>
+          <Paper p={40} radius="lg" withBorder>
+            <Stack align="center" spacing={40}>
               <Loader size="lg" />
               <Text size="sm" c="dimmed">Loading questions...</Text>
             </Stack>
           </Paper>
         ) : error ? (
-          <Paper p="xl" radius="lg" withBorder>
-            <Stack align="center" spacing="md" py={40}>
+          <Paper p={40} radius="lg" withBorder>
+            <Stack align="center" spacing={40}>
               <Text c="red" size="lg">{error}</Text>
               <Button variant="light" color="red" onClick={() => window.location.reload()}>
                 Try Again
@@ -217,8 +217,8 @@ function DatabaseView({ onBack }) {
             </Stack>
           </Paper>
         ) : (
-          <Paper p="xl" radius="lg" withBorder>
-            <Stack spacing="xl">
+          <Paper p={40} radius="lg" withBorder>
+            <Stack spacing={40}>
               <Group position="apart">
                 <Text size="sm" c="dimmed">
                   Showing {paginatedQuestions.length} of {sortedQuestions.length} questions

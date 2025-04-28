@@ -611,7 +611,7 @@ function MainView({ onViewDatabase }) {
   }
 
   return (
-    <Container size="lg" py={40}>
+    <Container size="xl" py={40}>
       <Stack spacing={40}>
         <Group position="apart" align="center">
           <Stack spacing={4}>
@@ -754,11 +754,11 @@ function MainView({ onViewDatabase }) {
                   size="md"
                 />
                 <Select
-                  label="Filter by Entity"
+                  label={<Text c="#FFFFFF">Filter by Entity</Text>}
                   description="Narrow down results to a specific entity"
                   placeholder="All entities"
                   data={[
-                    { value: '', label: 'All entities' },
+                    { value: '', label: 'All entities', color: '#333333' },
                     ...Array.from(new Set(questionnaires.map(q => q.entity)))
                       .filter(Boolean)
                       .map(entity => ({
@@ -768,6 +768,17 @@ function MainView({ onViewDatabase }) {
                   ]}
                   value={selectedEntity}
                   onChange={setSelectedEntity}
+                  styles={{
+                    input: {
+                      color: selectedEntity ? '#FFFFFF' : '#333333'
+                    },
+                    item: {
+                      color: '#FFFFFF',
+                      '&[data-selected]': {
+                        color: '#333333'
+                      }
+                    }
+                  }}
                 />
                 <Group position="right">
                   <Tooltip label="Search the knowledge base">

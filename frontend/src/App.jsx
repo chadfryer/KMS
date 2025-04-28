@@ -616,7 +616,7 @@ function MainView({ onViewDatabase }) {
         <Group position="apart" align="center">
           <Stack spacing={4}>
             <Title order={1} size={32}>Knowledge Management System</Title>
-            <Text c="dimmed" size="lg">Manage and search your question-answer database</Text>
+            <Text c="dimmed" size="lg">Manage and search your question-answer database.</Text>
           </Stack>
         </Group>
 
@@ -631,10 +631,13 @@ function MainView({ onViewDatabase }) {
             <form onSubmit={handleSubmit}>
               <Stack spacing="md">
                 <Textarea
-                  label="Question"
-                  description={<Box component="span" c="#FFFFFF" style={{ fontSize: '14px' }}>Enter the question you want to add to the knowledge base</Box>}
+                  label={
+                    <Text c="#FFFFFF" style={{ display: 'inline' }} fw={700}>
+                      Question<Text component="span" c="red" ml={0}>*</Text>
+                    </Text>
+                  }
+                  description={<Box component="span" c="dimmed" style={{ fontSize: '14px' }}>Enter the question you want to add to the knowledge base.</Box>}
                   placeholder="e.g., What are the operating hours?"
-                  required
                   value={newQuestion}
                   onChange={(e) => setNewQuestion(e.target.value)}
                   minRows={3}
@@ -647,10 +650,13 @@ function MainView({ onViewDatabase }) {
                   }}
                 />
                 <Textarea
-                  label="Answer"
-                  description={<Box component="span" c="#FFFFFF" style={{ fontSize: '14px' }}>Provide a clear and concise answer to the question</Box>}
+                  label={
+                    <Text c="#FFFFFF" style={{ display: 'inline' }} fw={700}>
+                      Answer<Text component="span" c="red" ml={0}>*</Text>
+                    </Text>
+                  }
+                  description={<Box component="span" c="dimmed" style={{ fontSize: '14px' }}>Provide a clear and concise answer to the question.</Box>}
                   placeholder="e.g., Our operating hours are Monday to Friday, 9 AM to 5 PM"
-                  required
                   value={newAnswerKey}
                   onChange={(e) => setNewAnswerKey(e.target.value)}
                   minRows={3}
@@ -663,10 +669,13 @@ function MainView({ onViewDatabase }) {
                   }}
                 />
                 <TextInput
-                  label="Entity"
-                  description={<Box component="span" c="#FFFFFF" style={{ fontSize: '14px' }}>Specify the entity or category this Q&A belongs to</Box>}
+                  label={
+                    <Text c="#FFFFFF" style={{ display: 'inline' }} fw={700}>
+                      Entity<Text component="span" c="red" ml={0}>*</Text>
+                    </Text>
+                  }
+                  description={<Box component="span" c="dimmed" style={{ fontSize: '14px' }}>Specify the entity or category to which this Q&A belongs.</Box>}
                   placeholder="e.g., Mindbody, ClassPass"
-                  required
                   value={newEntity}
                   onChange={(e) => setNewEntity(e.target.value)}
                   styles={{
@@ -693,8 +702,8 @@ function MainView({ onViewDatabase }) {
             </Group>
             <Stack spacing="md">
               <FileInput
-                label="Select CSV File"
-                description="Upload a CSV file containing questions and answers (columns: question, answer_key, entity)"
+                label={<Text c="#FFFFFF" fw={700}>Select CSV File</Text>}
+                description={<Box component="span" c="dimmed" style={{ fontSize: '14px' }}>Upload a CSV file containing questions and answers (columns: question, answer_key, entity).</Box>}
                 placeholder="Click to select file"
                 accept=".csv"
                 value={selectedFile}
@@ -747,15 +756,15 @@ function MainView({ onViewDatabase }) {
               <Stack spacing="md">
                 <TextInput
                   placeholder="Enter keywords to search..."
-                  description="Search for questions using keywords or phrases"
+                  description={<Box component="span" c="dimmed" style={{ fontSize: '14px' }}>Search for questions using keywords or phrases.</Box>}
                   value={searchQuery}
                   onChange={(e) => setSearchQuery(e.target.value)}
                   icon={<IconSearch size={20} />}
                   size="md"
                 />
                 <Select
-                  label={<Text c="#FFFFFF">Filter by Entity</Text>}
-                  description="Narrow down results to a specific entity"
+                  label={<Text c="#FFFFFF" fw={700}>Filter by Entity</Text>}
+                  description={<Box component="span" c="dimmed" style={{ fontSize: '14px' }}>Narrow down results to a specific entity.</Box>}
                   placeholder="All entities"
                   data={[
                     { value: '', label: 'All entities', color: '#333333' },

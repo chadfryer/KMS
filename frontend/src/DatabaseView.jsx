@@ -135,7 +135,7 @@ function DatabaseView({ onBack }) {
       <Stack spacing={40}>
         <Group position="apart" align="center">
           <Title order={1} size={32}>Knowledge Base</Title>
-          <Badge size="lg" variant="light" color="blue">
+          <Badge size="lg" variant="light" color="red" styles={{ root: { backgroundColor: '#CC0000', color: '#FFFFFF' } }}>
             {questions.length} Questions
           </Badge>
         </Group>
@@ -167,6 +167,14 @@ function DatabaseView({ onBack }) {
                   ]}
                   clearable
                   size="md"
+                  styles={{
+                    input: {
+                      color: '#333333'
+                    },
+                    item: {
+                      color: '#333333'
+                    }
+                  }}
                 />
 
                 <Group position="right">
@@ -211,6 +219,61 @@ function DatabaseView({ onBack }) {
         ) : (
           <Paper p="xl" radius="lg" withBorder>
             <Stack spacing="xl">
+              <Group position="apart">
+                <Text size="sm" c="dimmed">
+                  Showing {paginatedQuestions.length} of {sortedQuestions.length} questions
+                </Text>
+                <Group>
+                  <Button 
+                    variant="subtle"
+                    size="md"
+                    styles={{
+                      label: {
+                        fontWeight: 600
+                      }
+                    }}
+                    onClick={() => {
+                      const filtered = questions.filter(q => q.entity === 'Mindbody')
+                      setFilteredQuestions(filtered)
+                      setCurrentPage(1)
+                    }}
+                  >
+                    Show Mindbody
+                  </Button>
+                  <Button 
+                    variant="subtle"
+                    size="md"
+                    styles={{
+                      label: {
+                        fontWeight: 600
+                      }
+                    }}
+                    onClick={() => {
+                      const filtered = questions.filter(q => q.entity === 'ClassPass')
+                      setFilteredQuestions(filtered)
+                      setCurrentPage(1)
+                    }}
+                  >
+                    Show ClassPass
+                  </Button>
+                  <Button 
+                    variant="subtle"
+                    size="md"
+                    styles={{
+                      label: {
+                        fontWeight: 600
+                      }
+                    }}
+                    onClick={() => {
+                      setFilteredQuestions(questions)
+                      setCurrentPage(1)
+                    }}
+                  >
+                    Show All
+                  </Button>
+                </Group>
+              </Group>
+
               {paginatedQuestions.map((question, index) => (
                 <Paper
                   key={question.id || index}
@@ -227,13 +290,13 @@ function DatabaseView({ onBack }) {
                         <Text size="sm" weight={500} c="dimmed" mb={4}>
                           Question
                         </Text>
-                        <Text size="md">{question.question}</Text>
+                        <Text size="md" c="#333333">{question.question}</Text>
                       </Box>
                       <Box style={{ flex: 1 }}>
                         <Text size="sm" weight={500} c="dimmed" mb={4}>
                           Answer
                         </Text>
-                        <Text size="md">{question.answer_key}</Text>
+                        <Text size="md" c="#333333">{question.answer_key}</Text>
                       </Box>
                     </Group>
                     

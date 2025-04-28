@@ -21,24 +21,47 @@ const theme = {
   colors: {
     primary: ['#2563EB', '#2563EB', '#2563EB', '#2563EB', '#2563EB', '#2563EB', '#2563EB', '#2563EB', '#2563EB', '#2563EB'],
     secondary: ['#3B82F6', '#3B82F6', '#3B82F6', '#3B82F6', '#3B82F6', '#3B82F6', '#3B82F6', '#3B82F6', '#3B82F6', '#3B82F6'],
-    dark: ['#1E293B', '#1E293B', '#1E293B', '#1E293B', '#1E293B', '#1E293B', '#1E293B', '#1E293B', '#1E293B', '#1E293B']
+    dark: ['#1E293B', '#1E293B', '#1E293B', '#1E293B', '#1E293B', '#1E293B', '#1E293B', '#1E293B', '#1E293B', '#1E293B'],
+    charcoal: ['#333333', '#333333', '#333333', '#333333', '#333333', '#333333', '#333333', '#333333', '#333333', '#333333'],
+    spearmint: ['#AAFFD8', '#AAFFD8', '#AAFFD8', '#AAFFD8', '#AAFFD8', '#AAFFD8', '#AAFFD8', '#AAFFD8', '#AAFFD8', '#AAFFD8'],
+    fir: ['#045944', '#045944', '#045944', '#045944', '#045944', '#045944', '#045944', '#045944', '#045944', '#045944']
   },
   primaryColor: 'primary',
   fontFamily: 'Inter, -apple-system, BlinkMacSystemFont, Segoe UI, Roboto, Helvetica, Arial, sans-serif',
   components: {
+    Text: {
+      styles: {
+        root: {
+          color: '#FFFFFF'
+        }
+      }
+    },
+    Title: {
+      styles: {
+        root: {
+          color: '#FFFFFF'
+        }
+      }
+    },
     Button: {
       defaultProps: {
         radius: 'md',
-        size: 'md'
+        size: 'md',
+        variant: 'filled'
       },
       styles: {
         root: {
+          backgroundColor: '#CC0000',
           fontWeight: 600,
           transition: 'all 0.2s ease',
           '&:hover': {
+            backgroundColor: '#990000',
             transform: 'translateY(-2px)',
             boxShadow: '0 4px 12px rgba(0, 0, 0, 0.1)'
           }
+        },
+        label: {
+          color: '#FFFFFF'
         }
       }
     },
@@ -50,61 +73,87 @@ const theme = {
       },
       styles: {
         root: {
-          backgroundColor: '#ffffff',
-          borderColor: '#E2E8F0',
+          backgroundColor: '#333333',
+          borderColor: '#3A4444',
           transition: 'transform 0.2s ease, box-shadow 0.2s ease',
           '&:hover': {
             transform: 'translateY(-2px)',
-            boxShadow: '0 12px 24px rgba(0, 0, 0, 0.06)'
+            boxShadow: '0 12px 24px rgba(0, 0, 0, 0.2)'
+          },
+          '& label': {
+            color: '#FFFFFF !important'
+          },
+          '& .mantineTextRoot': {
+            color: '#FFFFFF !important'
+          },
+          '& .mantineTextInputLabel': {
+            color: '#FFFFFF !important'
+          },
+          '& .mantineTextInputDescription': {
+            color: '#FFFFFF !important'
+          },
+          '& .mantineTextareaLabel': {
+            color: '#FFFFFF !important'
+          },
+          '& .mantineTextareaDescription': {
+            color: '#FFFFFF !important'
+          },
+          '& .mantineSelectLabel': {
+            color: '#FFFFFF !important'
+          },
+          '& .mantineSelectDescription': {
+            color: '#FFFFFF !important'
+          },
+          '& .mantineFileInputLabel': {
+            color: '#FFFFFF !important'
+          },
+          '& .mantineFileInputDescription': {
+            color: '#FFFFFF !important'
           }
+        }
+      }
+    },
+    AppShell: {
+      styles: {
+        main: {
+          backgroundColor: '#000000'
+        },
+        navbar: {
+          backgroundColor: '#333333',
+          borderRight: '1px solid #3A4444'
+        },
+        header: {
+          backgroundColor: '#333333',
+          borderBottom: '1px solid #3A4444'
+        }
+      }
+    },
+    NavLink: {
+      styles: {
+        label: {
+          fontSize: '16px',
+          fontWeight: 600,
         }
       }
     },
     TextInput: {
       styles: {
         input: {
-          transition: 'all 0.2s ease',
-          '&:focus': {
-            borderColor: '#2563EB',
-            boxShadow: '0 0 0 3px rgba(37, 99, 235, 0.15)'
-          }
+          color: '#AAFFD8'
         }
       }
     },
     Textarea: {
       styles: {
         input: {
-          transition: 'all 0.2s ease',
-          '&:focus': {
-            borderColor: '#2563EB',
-            boxShadow: '0 0 0 3px rgba(37, 99, 235, 0.15)'
-          }
+          color: '#AAFFD8'
         }
       }
     },
     Select: {
       styles: {
         input: {
-          transition: 'all 0.2s ease',
-          '&:focus': {
-            borderColor: '#2563EB',
-            boxShadow: '0 0 0 3px rgba(37, 99, 235, 0.15)'
-          }
-        }
-      }
-    },
-    Modal: {
-      styles: {
-        title: { 
-          fontWeight: 600,
-          fontSize: '1.25rem'
-        },
-        header: {
-          backgroundColor: '#fff',
-          borderBottom: '1px solid #E2E8F0'
-        },
-        body: {
-          padding: '24px'
+          color: '#AAFFD8'
         }
       }
     }
@@ -135,8 +184,8 @@ function NavLink({ icon, label, active, onClick }) {
           justifyContent: 'flex-start',
         },
         label: {
-          fontSize: '14px',
-          fontWeight: 500,
+          fontSize: '16px',
+          fontWeight: 600,
         },
       })}
     >
@@ -564,6 +613,7 @@ function MainView({ onViewDatabase }) {
                   minRows={3}
                   styles={{
                     input: {
+                      color: '#AAFFD8',
                       fontSize: '16px',
                       lineHeight: 1.6
                     }
@@ -579,6 +629,7 @@ function MainView({ onViewDatabase }) {
                   minRows={3}
                   styles={{
                     input: {
+                      color: '#AAFFD8',
                       fontSize: '16px',
                       lineHeight: 1.6
                     }
@@ -591,6 +642,11 @@ function MainView({ onViewDatabase }) {
                   required
                   value={newEntity}
                   onChange={(e) => setNewEntity(e.target.value)}
+                  styles={{
+                    input: {
+                      color: '#AAFFD8'
+                    }
+                  }}
                 />
                 <Group position="right">
                   <Button type="submit" size="md">Add Question</Button>
@@ -857,7 +913,7 @@ function App() {
             />
             <NavLink
               icon={<IconClipboardList size={20} />}
-              label="Questionnaire Management"
+              label="Process Questionnaire"
               active={currentView === 'questionnaire-management'}
               onClick={() => setCurrentView('questionnaire-management')}
             />
@@ -876,7 +932,7 @@ function App() {
           </Stack>
         </AppShell.Navbar>
 
-        <AppShell.Main style={{ backgroundColor: '#f8f9fa' }}>
+        <AppShell.Main style={{ backgroundColor: '#000000' }}>
           {renderContent()}
         </AppShell.Main>
       </AppShell>

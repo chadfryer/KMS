@@ -9,26 +9,37 @@
  */
 
 import React, { useState, useEffect } from 'react'
-import { MantineProvider, Container, Title, Paper, Textarea, Button, Stack, Text, Group, FileInput, TextInput, Loader, Modal, Select } from '@mantine/core'
-import { IconUpload, IconSearch, IconDatabase, IconArrowLeft } from '@tabler/icons-react'
+import { MantineProvider } from '@mantine/core'
+import { AppShell, Burger } from '@mantine/core'
+import { Container, Title, Paper, Textarea, Button, Stack, Text, Group, FileInput, TextInput, Loader, Modal, Select, Alert, Badge, Tooltip } from '@mantine/core'
+import { IconUpload, IconSearch, IconDatabase, IconArrowLeft, IconInfoCircle, IconHome, IconClipboardList, IconChartBar, IconInbox } from '@tabler/icons-react'
 import DatabaseView from './DatabaseView'
+import QuestionnaireManagement from './QuestionnaireManagement'
 
 // Theme configuration for the application
 const theme = {
   colors: {
-    juniper: ['#67D7A4', '#67D7A4', '#67D7A4', '#67D7A4', '#67D7A4', '#67D7A4', '#67D7A4', '#67D7A4', '#67D7A4', '#67D7A4'],
-    spearmint: ['#AAFFD8', '#AAFFD8', '#AAFFD8', '#AAFFD8', '#AAFFD8', '#AAFFD8', '#AAFFD8', '#AAFFD8', '#AAFFD8', '#AAFFD8'],
-    basil: ['#008363', '#008363', '#008363', '#008363', '#008363', '#008363', '#008363', '#008363', '#008363', '#008363'],
-    fir: ['#045944', '#045944', '#045944', '#045944', '#045944', '#045944', '#045944', '#045944', '#045944', '#045944'],
-    charcoal: ['#2D2D2D', '#2D2D2D', '#2D2D2D', '#2D2D2D', '#2D2D2D', '#2D2D2D', '#2D2D2D', '#2D2D2D', '#2D2D2D', '#2D2D2D']
+    primary: ['#2563EB', '#2563EB', '#2563EB', '#2563EB', '#2563EB', '#2563EB', '#2563EB', '#2563EB', '#2563EB', '#2563EB'],
+    secondary: ['#3B82F6', '#3B82F6', '#3B82F6', '#3B82F6', '#3B82F6', '#3B82F6', '#3B82F6', '#3B82F6', '#3B82F6', '#3B82F6'],
+    dark: ['#1E293B', '#1E293B', '#1E293B', '#1E293B', '#1E293B', '#1E293B', '#1E293B', '#1E293B', '#1E293B', '#1E293B']
   },
-  primaryColor: 'juniper',
-  fontFamily: 'Averta Standard, sans-serif',
+  primaryColor: 'primary',
+  fontFamily: 'Inter, -apple-system, BlinkMacSystemFont, Segoe UI, Roboto, Helvetica, Arial, sans-serif',
   components: {
     Button: {
       defaultProps: {
-        color: 'juniper',
-        radius: 'md'
+        radius: 'md',
+        size: 'md'
+      },
+      styles: {
+        root: {
+          fontWeight: 600,
+          transition: 'all 0.2s ease',
+          '&:hover': {
+            transform: 'translateY(-2px)',
+            boxShadow: '0 4px 12px rgba(0, 0, 0, 0.1)'
+          }
+        }
       }
     },
     Paper: {
@@ -36,16 +47,102 @@ const theme = {
         radius: 'lg',
         shadow: 'sm',
         withBorder: true
+      },
+      styles: {
+        root: {
+          backgroundColor: '#ffffff',
+          borderColor: '#E2E8F0',
+          transition: 'transform 0.2s ease, box-shadow 0.2s ease',
+          '&:hover': {
+            transform: 'translateY(-2px)',
+            boxShadow: '0 12px 24px rgba(0, 0, 0, 0.06)'
+          }
+        }
       }
     },
-    Title: {
-      styles: (theme) => ({
-        root: {
-          fontWeight: 600
+    TextInput: {
+      styles: {
+        input: {
+          transition: 'all 0.2s ease',
+          '&:focus': {
+            borderColor: '#2563EB',
+            boxShadow: '0 0 0 3px rgba(37, 99, 235, 0.15)'
+          }
         }
-      })
+      }
+    },
+    Textarea: {
+      styles: {
+        input: {
+          transition: 'all 0.2s ease',
+          '&:focus': {
+            borderColor: '#2563EB',
+            boxShadow: '0 0 0 3px rgba(37, 99, 235, 0.15)'
+          }
+        }
+      }
+    },
+    Select: {
+      styles: {
+        input: {
+          transition: 'all 0.2s ease',
+          '&:focus': {
+            borderColor: '#2563EB',
+            boxShadow: '0 0 0 3px rgba(37, 99, 235, 0.15)'
+          }
+        }
+      }
+    },
+    Modal: {
+      styles: {
+        title: { 
+          fontWeight: 600,
+          fontSize: '1.25rem'
+        },
+        header: {
+          backgroundColor: '#fff',
+          borderBottom: '1px solid #E2E8F0'
+        },
+        body: {
+          padding: '24px'
+        }
+      }
     }
   }
+}
+
+// NavLink component for sidebar
+function NavLink({ icon, label, active, onClick }) {
+  return (
+    <Button
+      onClick={onClick}
+      variant={active ? 'light' : 'subtle'}
+      color={active ? 'blue' : 'gray'}
+      fullWidth
+      leftSection={icon}
+      justify="flex-start"
+      styles={(theme) => ({
+        root: {
+          padding: '12px 16px',
+          height: 'auto',
+          minHeight: '48px',
+          lineHeight: '1.5',
+          '&:hover': {
+            backgroundColor: theme.colorScheme === 'dark' ? theme.colors.dark[6] : theme.colors.gray[0],
+          },
+        },
+        inner: {
+          justifyContent: 'flex-start',
+        },
+        label: {
+          fontSize: '14px',
+          fontWeight: 500,
+        },
+      })}
+    >
+      {label}
+    </Button>
+  )
 }
 
 /**
@@ -55,7 +152,6 @@ const theme = {
  * @param {Function} props.onViewDatabase - Callback function to view the database
  */
 function MainView({ onViewDatabase }) {
-  // State management for form inputs and file uploads
   const [newQuestion, setNewQuestion] = useState('')
   const [newAnswerKey, setNewAnswerKey] = useState('')
   const [newEntity, setNewEntity] = useState('')
@@ -65,31 +161,31 @@ function MainView({ onViewDatabase }) {
   const [searchQuery, setSearchQuery] = useState('')
   const [searchResults, setSearchResults] = useState(null)
   const [isSearching, setIsSearching] = useState(false)
-  const [questionnaireFile, setQuestionnaireFile] = useState(null)
-  const [isProcessing, setIsProcessing] = useState(false)
-  const [processingResults, setProcessingResults] = useState(null)
   const [selectedEntity, setSelectedEntity] = useState('')
   const [questionnaires, setQuestionnaires] = useState([])
   const [isLoading, setIsLoading] = useState(true)
-  const [processStatus, setProcessStatus] = useState(null)  // New state for process questionnaire status
+  const [questionnaireFile, setQuestionnaireFile] = useState(null)
+  const [isProcessing, setIsProcessing] = useState(false)
+  const [processingResults, setProcessingResults] = useState(null)
+  const [processStatus, setProcessStatus] = useState(null)
 
-  // Modal state management
   const [duplicatesModal, setDuplicatesModal] = useState({
     opened: false,
     title: '',
     duplicates: [],
     similarQuestion: null
   })
-  const [processingResultsModal, setProcessingResultsModal] = useState({
-    opened: false,
-    results: null
-  })
+
   const [searchResultsModal, setSearchResultsModal] = useState({
     opened: false,
     results: null
   })
 
-  // Fetch questionnaires on component mount
+  const [processingResultsModal, setProcessingResultsModal] = useState({
+    opened: false,
+    results: null
+  })
+
   useEffect(() => {
     const fetchQuestionnaires = async () => {
       try {
@@ -98,14 +194,10 @@ function MainView({ onViewDatabase }) {
           throw new Error('Failed to fetch questionnaires')
         }
         const data = await response.json()
-        console.log('Raw questionnaires data:', data)
-        console.log('Questions array:', data.questions)
         if (data.questions && Array.isArray(data.questions)) {
           const entities = data.questions
             .map(q => q.entity)
             .filter(entity => entity && entity.trim() !== '')
-          console.log('Extracted entities:', entities)
-          console.log('Unique entities:', [...new Set(entities)])
           setQuestionnaires(data.questions)
         } else {
           console.error('Invalid data structure:', data)
@@ -209,7 +301,6 @@ function MainView({ onViewDatabase }) {
         })
       }
 
-      // Fetch updated questionnaires after successful upload
       const questionnairesResponse = await fetch('http://localhost:8000/questions')
       if (questionnairesResponse.ok) {
         const questionnairesData = await questionnairesResponse.json()
@@ -276,9 +367,6 @@ function MainView({ onViewDatabase }) {
     }
   }
 
-  /**
-   * Handle questionnaire processing
-   */
   const handleProcessQuestionnaire = async () => {
     if (!questionnaireFile) return
 
@@ -447,508 +535,149 @@ function MainView({ onViewDatabase }) {
   }
 
   return (
-    <Container size="md" py={40}>
+    <Container size="lg" py={40}>
       <Stack spacing={40}>
-        <div style={{ 
-          position: 'relative',
-          width: '100%',
-          display: 'flex',
-          flexDirection: 'column',
-          alignItems: 'center'
-        }}>
-          <div style={{ 
-            position: 'absolute',
-            right: '-200px',
-            top: 0
-          }}>
-            <Button
-              onClick={onViewDatabase}
-              variant="filled"
-              leftSection={<IconDatabase size={20} />}
-              style={{
-                backgroundColor: '#008363',
-                color: '#FFFFFF',
-                border: 'none',
-                boxShadow: '0 4px 6px rgba(0, 131, 99, 0.1)',
-                transition: 'transform 0.2s, box-shadow 0.2s',
-                '&:hover': {
-                  backgroundColor: '#045944',
-                  transform: 'translateY(-2px)',
-                  boxShadow: '0 6px 8px rgba(0, 131, 99, 0.15)'
-                }
-              }}
-            >
-              Knowledge Base
-            </Button>
-          </div>
-          <Title 
-            order={1}
-            size="42px"
-            c="spearmint"
-            mb="xs"
-            style={{ textAlign: 'center', width: '100%' }}
-          >
-            Knowledge Management
-          </Title>
-          <Text c="juniper" size="lg" style={{ textAlign: 'center', width: '100%' }}>
-            Bringing the knowledge since 2025
-          </Text>
-        </div>
+        <Group position="apart" align="center">
+          <Stack spacing={4}>
+            <Title order={1} size={32}>Knowledge Management System</Title>
+            <Text c="dimmed" size="lg">Manage and search your question-answer database</Text>
+          </Stack>
+        </Group>
 
-        <Title 
-          order={2}
-          size="28px"
-          c="#67D7A4"
-          style={{ 
-            textAlign: 'center',
-            marginBottom: '20px',
-            borderBottom: '2px solid #67D7A4',
-            paddingBottom: '10px'
-          }}
-        >
-          Sacrifice Data to the Knowledge Gods
-        </Title>
-
-        <Stack spacing="xl">
-          <Stack spacing={100}>
-            <Paper 
-              p={40} 
-              style={{ 
-                backgroundColor: 'rgba(255, 255, 255, 0.9)',
-                borderColor: '#67D7A4',
-                backdropFilter: 'blur(8px)',
-                WebkitBackdropFilter: 'blur(8px)',
-                boxShadow: '0 4px 6px rgba(0, 0, 0, 0.1)',
-                borderRadius: '12px'
-              }}
-            >
-              <Title 
-                order={3}
-                size="24px"
-                c="#045944"
-                mb="lg"
-              >
-                Add New Question / Answer Key Pair
-              </Title>
-              <form onSubmit={handleSubmit}>
-                <Stack spacing="lg">
-                  <Textarea
-                    label="Question"
-                    description="Enter the question you want to add"
-                    placeholder="e.g., Do you even encrypt, bro?"
-                    required
-                    value={newQuestion}
-                    onChange={(e) => setNewQuestion(e.target.value)}
-                    minRows={3}
-                    styles={{
-                      label: { 
-                        color: '#045944',
-                        fontWeight: 600,
-                        marginBottom: 4
-                      },
-                      description: {
-                        color: '#008363'
-                      },
-                      input: { 
-                        backgroundColor: '#FFFFFF',
-                        color: '#045944',
-                        borderColor: '#67D7A4',
-                        '&:focus': {
-                          borderColor: '#045944'
-                        },
-                        '&::placeholder': {
-                          color: 'rgba(4, 89, 68, 0.5)'
-                        }
-                      }
-                    }}
-                  />
-                  <Textarea
-                    label="Answer"
-                    description="Provide the correct answer"
-                    placeholder="e.g., Do you, bro!"
-                    required
-                    value={newAnswerKey}
-                    onChange={(e) => setNewAnswerKey(e.target.value)}
-                    minRows={3}
-                    styles={{
-                      label: { 
-                        color: '#045944',
-                        fontWeight: 600,
-                        marginBottom: 4
-                      },
-                      description: {
-                        color: '#008363'
-                      },
-                      input: { 
-                        backgroundColor: '#FFFFFF',
-                        color: '#045944',
-                        borderColor: '#67D7A4',
-                        '&:focus': {
-                          borderColor: '#045944'
-                        },
-                        '&::placeholder': {
-                          color: 'rgba(4, 89, 68, 0.5)'
-                        }
-                      }
-                    }}
-                  />
-                  <TextInput
-                    label="Entity"
-                    description="The system or entity this question relates to"
-                    placeholder="e.g., Mindbody, ClassPass, etc."
-                    required
-                    value={newEntity}
-                    onChange={(e) => setNewEntity(e.target.value)}
-                    styles={{
-                      label: { 
-                        color: '#045944',
-                        fontWeight: 600,
-                        marginBottom: 4
-                      },
-                      description: {
-                        color: '#008363'
-                      },
-                      input: { 
-                        backgroundColor: '#FFFFFF',
-                        color: '#045944',
-                        borderColor: '#67D7A4',
-                        '&:focus': {
-                          borderColor: '#045944'
-                        }
-                      }
-                    }}
-                  />
-                  <Button 
-                    type="submit" 
-                    style={{
-                      backgroundColor: '#008363',
-                      boxShadow: '0 4px 6px rgba(0, 131, 99, 0.1)',
-                      transition: 'transform 0.2s, box-shadow 0.2s',
-                      '&:hover': {
-                        backgroundColor: '#045944',
-                        transform: 'translateY(-2px)',
-                        boxShadow: '0 6px 8px rgba(0, 131, 99, 0.15)'
-                      }
-                    }}
-                  >
-                    Submit
-                  </Button>
-                </Stack>
-              </form>
-            </Paper>
-
-            <Paper 
-              p={40} 
-              style={{ 
-                backgroundColor: 'rgba(255, 255, 255, 0.9)',
-                borderColor: '#67D7A4',
-                backdropFilter: 'blur(8px)',
-                WebkitBackdropFilter: 'blur(8px)',
-                boxShadow: '0 4px 6px rgba(0, 0, 0, 0.1)',
-                borderRadius: '12px',
-                marginTop: '40px'
-              }}
-            >
-              <Title 
-                order={3}
-                size="24px"
-                c="#045944"
-                mb="lg"
-              >
-                Upload Updated Questionnaires
-              </Title>
-              <Stack spacing="lg">
-                <FileInput
-                  label="Select CSV File"
-                  description="Upload a CSV file exported from Excel with 'question' and 'answer_key' columns"
-                  placeholder="Click to select file"
-                  accept=".csv"
-                  value={selectedFile}
-                  onChange={setSelectedFile}
-                  multiple={false}
-                  icon={<IconUpload size={20} />}
+        <Paper p={40} radius="lg" withBorder mb={40}>
+          <Stack spacing="xl">
+            <Group position="apart">
+              <Title order={2} size={24}>Add New Question</Title>
+              <Tooltip label="Add individual questions and answers to the knowledge base" position="left">
+                <IconInfoCircle size={20} style={{ color: '#94A3B8' }} />
+              </Tooltip>
+            </Group>
+            <form onSubmit={handleSubmit}>
+              <Stack spacing="md">
+                <Textarea
+                  label="Question"
+                  description="Enter the question you want to add to the knowledge base"
+                  placeholder="e.g., What are the operating hours?"
+                  required
+                  value={newQuestion}
+                  onChange={(e) => setNewQuestion(e.target.value)}
+                  minRows={3}
                   styles={{
-                    label: { 
-                      color: '#045944',
-                      fontWeight: 600,
-                      marginBottom: 4
-                    },
-                    description: {
-                      color: '#008363'
-                    },
-                    input: { 
-                      backgroundColor: '#FFFFFF',
-                      color: '#045944',
-                      borderColor: '#67D7A4',
-                      '&:focus': {
-                        borderColor: '#045944'
-                      }
+                    input: {
+                      fontSize: '16px',
+                      lineHeight: 1.6
                     }
                   }}
                 />
-                {selectedFile && (
-        <Stack spacing="md">
-                    <Group>
-                      <Button
-                        onClick={() => handleFileUpload(selectedFile)}
-                        loading={isUploading}
-                        leftSection={<IconUpload size={20} />}
-                        style={{
-                          backgroundColor: '#008363',
-                          boxShadow: '0 4px 6px rgba(0, 131, 99, 0.1)',
-                          transition: 'transform 0.2s, box-shadow 0.2s',
-                          '&:hover': {
-                            backgroundColor: '#045944',
-                            transform: 'translateY(-2px)',
-                            boxShadow: '0 6px 8px rgba(0, 131, 99, 0.15)'
-                          }
-                        }}
-                      >
-                        Upload File
-                      </Button>
-                      <Button
-                        variant="outline"
-                        onClick={() => setSelectedFile(null)}
-                        style={{
-                          borderColor: '#67D7A4',
-                          color: '#045944'
-                        }}
-                      >
-                        Clear Selection
-                      </Button>
-                    </Group>
-                    <Paper p="md" style={{ backgroundColor: '#F8F9FA' }}>
-                      <Stack spacing="xs">
-                        <Text size="sm" weight={600} c="#045944">Selected File:</Text>
-                        <Text size="sm" c="#008363">
-                          {selectedFile.name}
-                        </Text>
-                      </Stack>
-                    </Paper>
-                  </Stack>
-                )}
-                {uploadStatus && (
-                  <Stack spacing="xs">
-                    <Text
-                      color={uploadStatus.type === 'success' ? 'green' : 'red'}
-                      size="sm"
-                    >
-                      {uploadStatus.message}
-                    </Text>
-                    {uploadStatus.results && (
-                      <Stack spacing="xs">
-                        {uploadStatus.results.map((result, index) => (
-                          <Text
-                            key={index}
-                            color={result.status === 'success' ? 'green' : 'red'}
-                            size="sm"
-                          >
-                            {result.file}: {result.message}
-                          </Text>
-                        ))}
-                      </Stack>
-                    )}
-                  </Stack>
-                )}
-                <Stack spacing={4}>
-                  <Text size="sm" color="dimmed">
-                    Tips for Excel CSV files:
-                  </Text>
-                  <Text size="sm" color="dimmed" component="div">
-                    <ul style={{ margin: '8px 0', paddingLeft: 16 }}>
-                      <li>Save your Excel file as "CSV UTF-8" or "CSV (Comma delimited)"</li>
-                      <li>Make sure your columns are named "question" and "answer_key"</li>
-                      <li>Remove any special characters or formatting from Excel</li>
-                    </ul>
-                  </Text>
-                </Stack>
-              </Stack>
-            </Paper>
-          </Stack>
-
-          <Title 
-            order={2}
-            size="28px"
-            c="#67D7A4"
-            style={{ 
-              textAlign: 'center',
-              margin: '40px 0 20px',
-              borderBottom: '2px solid #67D7A4',
-              paddingBottom: '10px'
-            }}
-          >
-            Consume the Knowledge of the Gods
-          </Title>
-
-          <Stack spacing={100}>
-            <Paper 
-              p={40} 
-              style={{ 
-                backgroundColor: 'rgba(255, 255, 255, 0.9)',
-                borderColor: '#67D7A4',
-                backdropFilter: 'blur(8px)',
-                WebkitBackdropFilter: 'blur(8px)',
-                boxShadow: '0 4px 6px rgba(0, 0, 0, 0.1)',
-                borderRadius: '12px'
-              }}
-            >
-              <Title 
-                order={3}
-                size="24px"
-                c="#045944"
-                mb="sm"
-              >
-                Search Questions
-              </Title>
-              <Text size="sm" c="#008363" mb="lg">
-                Search the knowledge base for questions and answers
-              </Text>
-              
-              <form onSubmit={handleSearch}>
-                <Stack spacing="md">
-                  <TextInput
-                    label="Search Query"
-                    description="Enter keywords to search questions, answers, or comments"
-                    placeholder="e.g., encryption, password, security"
-                    value={searchQuery}
-                    onChange={(e) => setSearchQuery(e.target.value)}
-                    icon={<IconSearch size={16} />}
-                    styles={{
-                      label: { 
-                        color: '#045944',
-                        fontWeight: 600,
-                        marginBottom: 4
-                      },
-                      description: {
-                        color: '#008363'
-                      },
-                      input: { 
-                        backgroundColor: '#FFFFFF',
-                        color: '#045944',
-                        borderColor: '#67D7A4',
-                        '&:focus': {
-                          borderColor: '#045944'
-                        }
-                      }
-                    }}
-                  />
-                  <Select
-                    label="Filter by Entity"
-                    description="Select an entity to filter search results"
-                    placeholder="All entities"
-                    data={[
-                      { value: '', label: 'All entities' },
-                      ...questionnaires
-                        .filter(q => q.entity && q.entity.trim() !== '')
-                        .map(q => q.entity)
-                        .filter((entity, index, self) => self.indexOf(entity) === index)
-                        .map(entity => ({
-                          value: entity,
-                          label: entity
-                        }))
-                    ]}
-                    value={selectedEntity}
-                    onChange={setSelectedEntity}
-                    styles={{
-                      label: { 
-                        color: '#045944',
-                        fontWeight: 600,
-                        marginBottom: 4
-                      },
-                      description: {
-                        color: '#008363'
-                      },
-                      input: { 
-                        backgroundColor: '#FFFFFF',
-                        color: '#045944',
-                        borderColor: '#67D7A4',
-                        '&:focus': {
-                          borderColor: '#045944'
-                        }
-                      }
-                    }}
-                  />
-                  <Button 
-                    type="submit" 
-                    loading={isSearching}
-                    style={{
-                      backgroundColor: '#008363',
-                      boxShadow: '0 4px 6px rgba(0, 131, 99, 0.1)',
-                      transition: 'transform 0.2s, box-shadow 0.2s',
-                      '&:hover': {
-                        backgroundColor: '#045944',
-                        transform: 'translateY(-2px)',
-                        boxShadow: '0 6px 8px rgba(0, 131, 99, 0.15)'
-                      }
-                    }}
-                  >
-                    Search
-                  </Button>
-                </Stack>
-              </form>
-            </Paper>
-
-            <Paper 
-              p={40} 
-              style={{ 
-                backgroundColor: 'rgba(255, 255, 255, 0.9)',
-                borderColor: '#67D7A4',
-                backdropFilter: 'blur(8px)',
-                WebkitBackdropFilter: 'blur(8px)',
-                boxShadow: '0 4px 6px rgba(0, 0, 0, 0.1)',
-                borderRadius: '12px',
-                marginTop: '40px'
-              }}
-            >
-              <Title 
-                order={3}
-                size="24px"
-                c="#045944"
-                mb="lg"
-              >
-                Process Questionnaire
-              </Title>
-              <Stack spacing="lg">
-                <Text size="sm" c="#008363">
-                  Upload a CSV file with questions only. The system will find matching answers from the knowledge base.
-                </Text>
-                <FileInput
-                  label="Select Questionnaire CSV"
-                  description="Upload a CSV file with questions (no answers needed)"
-                  placeholder="Click to select file"
-                  accept=".csv"
-                  value={questionnaireFile}
-                  onChange={setQuestionnaireFile}
-                  icon={<IconUpload size={20} />}
+                <Textarea
+                  label="Answer"
+                  description="Provide a clear and concise answer to the question"
+                  placeholder="e.g., Our operating hours are Monday to Friday, 9 AM to 5 PM"
+                  required
+                  value={newAnswerKey}
+                  onChange={(e) => setNewAnswerKey(e.target.value)}
+                  minRows={3}
                   styles={{
-                    label: { 
-                      color: '#045944',
-                      fontWeight: 600,
-                      marginBottom: 4
-                    },
-                    description: {
-                      color: '#008363'
-                    },
-                    input: { 
-                      backgroundColor: '#FFFFFF',
-                      color: '#045944',
-                      borderColor: '#67D7A4',
-                      '&:focus': {
-                        borderColor: '#045944'
-                      }
+                    input: {
+                      fontSize: '16px',
+                      lineHeight: 1.6
                     }
                   }}
+                />
+                <TextInput
+                  label="Entity"
+                  description="Specify the entity or category this Q&A belongs to"
+                  placeholder="e.g., Mindbody, ClassPass"
+                  required
+                  value={newEntity}
+                  onChange={(e) => setNewEntity(e.target.value)}
+                />
+                <Group position="right">
+                  <Button type="submit" size="md">Add Question</Button>
+                </Group>
+              </Stack>
+            </form>
+          </Stack>
+        </Paper>
+
+        <Paper p={40} radius="lg" withBorder mb={40}>
+          <Stack spacing="xl">
+            <Group position="apart">
+              <Title order={2} size={24}>Upload Questions</Title>
+              <Tooltip label="Bulk upload questions and answers using a CSV file" position="left">
+                <IconInfoCircle size={20} style={{ color: '#94A3B8' }} />
+              </Tooltip>
+            </Group>
+            <Stack spacing="md">
+              <FileInput
+                label="Select CSV File"
+                description="Upload a CSV file containing questions and answers (columns: question, answer_key, entity)"
+                placeholder="Click to select file"
+                accept=".csv"
+                value={selectedFile}
+                onChange={setSelectedFile}
+                icon={<IconUpload size={20} />}
+              />
+              {selectedFile && (
+                <Group>
+                  <Tooltip label="Upload and process the selected CSV file">
+                    <Button
+                      onClick={() => handleFileUpload(selectedFile)}
+                      loading={isUploading}
+                      leftSection={<IconUpload size={20} />}
+                    >
+                      Upload File
+                    </Button>
+                  </Tooltip>
+                  <Tooltip label="Clear the selected file">
+                    <Button
+                      variant="light"
+                      onClick={() => setSelectedFile(null)}
+                    >
+                      Clear
+                    </Button>
+                  </Tooltip>
+                </Group>
+              )}
+              {uploadStatus && (
+                <Alert 
+                  color={uploadStatus.type === 'success' ? 'green' : 'red'}
+                  title={uploadStatus.type === 'success' ? 'Success' : 'Error'}
+                  variant="light"
+                >
+                  {uploadStatus.message}
+                </Alert>
+              )}
+            </Stack>
+          </Stack>
+        </Paper>
+
+        <Paper p={40} radius="lg" withBorder>
+          <Stack spacing="xl">
+            <Group position="apart">
+              <Title order={2} size={24}>Search Questions</Title>
+              <Tooltip label="Search through the knowledge base using keywords or phrases" position="left">
+                <IconInfoCircle size={20} style={{ color: '#94A3B8' }} />
+              </Tooltip>
+            </Group>
+            <form onSubmit={handleSearch}>
+              <Stack spacing="md">
+                <TextInput
+                  placeholder="Enter keywords to search..."
+                  description="Search for questions using keywords or phrases"
+                  value={searchQuery}
+                  onChange={(e) => setSearchQuery(e.target.value)}
+                  icon={<IconSearch size={20} />}
+                  size="md"
                 />
                 <Select
                   label="Filter by Entity"
-                  description="Select an entity to filter potential matches"
+                  description="Narrow down results to a specific entity"
                   placeholder="All entities"
                   data={[
                     { value: '', label: 'All entities' },
-                    ...questionnaires
-                      .filter(q => q.entity && q.entity.trim() !== '')
-                      .map(q => q.entity)
-                      .filter((entity, index, self) => self.indexOf(entity) === index)
+                    ...Array.from(new Set(questionnaires.map(q => q.entity)))
+                      .filter(Boolean)
                       .map(entity => ({
                         value: entity,
                         label: entity
@@ -956,135 +685,57 @@ function MainView({ onViewDatabase }) {
                   ]}
                   value={selectedEntity}
                   onChange={setSelectedEntity}
-                  styles={{
-                    label: { 
-                      color: '#045944',
-                      fontWeight: 600,
-                      marginBottom: 4
-                    },
-                    description: {
-                      color: '#008363'
-                    },
-                    input: { 
-                      backgroundColor: '#FFFFFF',
-                      color: '#045944',
-                      borderColor: '#67D7A4',
-                      '&:focus': {
-                        borderColor: '#045944'
-                      }
-                    }
-                  }}
                 />
-                {questionnaireFile && (
-                  <Group>
-                    <Button
-                      onClick={handleProcessQuestionnaire}
-                      loading={isProcessing}
-                      leftSection={<IconUpload size={20} />}
-                      style={{
-                        backgroundColor: '#008363',
-                        boxShadow: '0 4px 6px rgba(0, 131, 99, 0.1)',
-                        transition: 'transform 0.2s, box-shadow 0.2s',
-                        '&:hover': {
-                          backgroundColor: '#045944',
-                          transform: 'translateY(-2px)',
-                          boxShadow: '0 6px 8px rgba(0, 131, 99, 0.15)'
-                        }
-                      }}
+                <Group position="right">
+                  <Tooltip label="Search the knowledge base">
+                    <Button 
+                      type="submit" 
+                      loading={isSearching}
+                      leftSection={<IconSearch size={20} />}
                     >
-                      Process Questionnaire
+                      Search
                     </Button>
-                    <Button
-                      variant="outline"
-                      onClick={() => setQuestionnaireFile(null)}
-                      style={{
-                        borderColor: '#67D7A4',
-                        color: '#045944'
-                      }}
-                    >
-                      Clear Selection
-                    </Button>
-                  </Group>
-                )}
-                {processStatus && (  // Show process status instead of upload status
-                  <Text
-                    color={processStatus.type === 'success' ? 'green' : 'red'}
-                    size="sm"
-                  >
-                    {processStatus.message}
-                  </Text>
-                )}
+                  </Tooltip>
+                </Group>
               </Stack>
-            </Paper>
+            </form>
           </Stack>
-        </Stack>
+        </Paper>
 
-        {/* Duplicates Modal */}
         <Modal
           opened={duplicatesModal.opened}
           onClose={() => setDuplicatesModal({ ...duplicatesModal, opened: false })}
           title={duplicatesModal.title}
           size="lg"
-          styles={{
-            title: {
-              color: '#045944',
-              fontWeight: 600,
-              fontSize: '1.2rem'
-            },
-            header: {
-              backgroundColor: '#FFFFFF',
-              borderBottom: '1px solid #67D7A4'
-            },
-            body: {
-              backgroundColor: '#FFFFFF'
-            }
-          }}
         >
           {duplicatesModal.similarQuestion ? (
             <Stack spacing="md">
-              <Text weight={600} c="#045944">Similar Question Found:</Text>
-              <Text c="#008363">{duplicatesModal.similarQuestion.question}</Text>
-              {duplicatesModal.similarQuestion.entity && (
-                <>
-                  <Text weight={600} c="#045944">Entity:</Text>
-                  <Text c="#008363">{duplicatesModal.similarQuestion.entity}</Text>
-                </>
-              )}
-              <Text weight={600} c="#045944">Answer:</Text>
-              <Text c="#008363">{duplicatesModal.similarQuestion.answer_key}</Text>
-              {duplicatesModal.similarQuestion.comment && (
-                <>
-                  <Text weight={600} c="#045944">Comment:</Text>
-                  <Text c="#008363">{duplicatesModal.similarQuestion.comment}</Text>
-                </>
-              )}
+              <Paper p="md" withBorder>
+                <Stack spacing="sm">
+                  <Text weight={600}>Similar Question Found:</Text>
+                  <Text>{duplicatesModal.similarQuestion.question}</Text>
+                  {duplicatesModal.similarQuestion.entity && (
+                    <>
+                      <Text weight={600}>Entity:</Text>
+                      <Text>{duplicatesModal.similarQuestion.entity}</Text>
+                    </>
+                  )}
+                  <Text weight={600}>Answer:</Text>
+                  <Text>{duplicatesModal.similarQuestion.answer_key}</Text>
+                </Stack>
+              </Paper>
             </Stack>
           ) : (
             <Stack spacing="md">
               {duplicatesModal.duplicates.map((dup, idx) => (
-                <Paper key={idx} p="md" style={{ 
-                  backgroundColor: 'rgba(255, 0, 0, 0.1)',
-                  border: '1px solid #ff0000'
-                }}>
-                  <Stack spacing="xs">
-                    <Text weight={600} c="#045944">Duplicate Question:</Text>
-                    <Text c="#008363">{dup.question}</Text>
-                    <Text weight={600} c="#045944">Similar to:</Text>
-                    <Text c="#008363">{dup.similar_to.question}</Text>
-                    {dup.similar_to.entity && (
-                      <>
-                        <Text weight={600} c="#045944">Entity:</Text>
-                        <Text c="#008363">{dup.similar_to.entity}</Text>
-                      </>
-                    )}
-                    <Text weight={600} c="#045944">Existing Answer:</Text>
-                    <Text c="#008363">{dup.similar_to.answer_key}</Text>
-                    {dup.similar_to.comment && (
-                      <>
-                        <Text weight={600} c="#045944">Comment:</Text>
-                        <Text c="#008363">{dup.similar_to.comment}</Text>
-                      </>
-                    )}
+                <Paper key={idx} p="md" withBorder>
+                  <Stack spacing="sm">
+                    <Text weight={600}>Duplicate Question:</Text>
+                    <Text>{dup.question}</Text>
+                    <Text weight={600}>Similar to:</Text>
+                    <Text>{dup.similar_to.question}</Text>
+                    <Text weight={600}>Answer:</Text>
+                    <Text>{dup.similar_to.answer_key}</Text>
                   </Stack>
                 </Paper>
               ))}
@@ -1092,120 +743,38 @@ function MainView({ onViewDatabase }) {
           )}
         </Modal>
 
-        {/* Processing Results Modal */}
-        <Modal
-          opened={processingResultsModal.opened}
-          onClose={() => setProcessingResultsModal({ ...processingResultsModal, opened: false })}
-          title="Processing Results"
-          size="lg"
-          styles={{
-            title: {
-              color: '#045944',
-              fontWeight: 600,
-              fontSize: '1.2rem'
-            },
-            header: {
-              backgroundColor: '#FFFFFF',
-              borderBottom: '1px solid #67D7A4'
-            },
-            body: {
-              backgroundColor: '#FFFFFF'
-            }
-          }}
-        >
-          {processingResultsModal.results && (
-            <Stack spacing="md">
-              {processingResultsModal.results.map((result, index) => (
-                <Paper key={index} p="md" style={{ 
-                  backgroundColor: result.best_match && result.best_match.is_ai_generated ? '#2D2D2D' : 'rgba(103, 215, 164, 0.1)',
-                  border: result.best_match && result.best_match.is_ai_generated ? '1px solid #2D2D2D' : '1px solid #67D7A4'
-                }}>
-                  <Stack spacing="xs">
-                    <Text weight={600} c={result.best_match && result.best_match.is_ai_generated ? '#AAFFD8' : '#045944'}>Question:</Text>
-                    <Text c={result.best_match && result.best_match.is_ai_generated ? '#FFFFFF' : '#008363'}>{result.input_question}</Text>
-                    {result.best_match ? (
-                      <>
-                        {result.best_match.entity && (
-                          <>
-                            <Text weight={600} c={result.best_match.is_ai_generated ? '#AAFFD8' : '#045944'}>Entity:</Text>
-                            <Text c={result.best_match.is_ai_generated ? '#FFFFFF' : '#008363'}>{result.best_match.entity}</Text>
-                          </>
-                        )}
-                        <Text weight={600} c={result.best_match.is_ai_generated ? '#AAFFD8' : '#045944'}>Matched Answer:</Text>
-                        <Text c={result.best_match.is_ai_generated ? '#FFFFFF' : '#008363'}>{result.best_match.answer_key}</Text>
-                        {result.best_match.comment && (
-                          <>
-                            <Text weight={600} c={result.best_match.is_ai_generated ? '#AAFFD8' : '#045944'}>Comment:</Text>
-                            <Text c={result.best_match.is_ai_generated ? '#FFFFFF' : '#008363'}>{result.best_match.comment}</Text>
-                          </>
-                        )}
-                      </>
-                    ) : (
-                      <Text c="red">No matching answer found in knowledge base</Text>
-                    )}
-                  </Stack>
-                </Paper>
-              ))}
-            </Stack>
-          )}
-        </Modal>
-
-        {/* Search Results Modal */}
         <Modal
           opened={searchResultsModal.opened}
           onClose={() => setSearchResultsModal({ ...searchResultsModal, opened: false })}
           title="Search Results"
           size="lg"
-          styles={{
-            title: {
-              color: '#045944',
-              fontWeight: 600,
-              fontSize: '1.2rem'
-            },
-            header: {
-              backgroundColor: '#FFFFFF',
-              borderBottom: '1px solid #67D7A4'
-            },
-            body: {
-              backgroundColor: '#FFFFFF'
-            }
-          }}
         >
           {searchResultsModal.results && (
             <Stack spacing="md">
               {searchResultsModal.results.length === 0 ? (
-                <Text c="dimmed" style={{ textAlign: 'center' }}>
-                  No results found for "{searchQuery}"
-                </Text>
+                <Text c="dimmed" ta="center">No results found</Text>
               ) : (
                 searchResultsModal.results.map((result, index) => (
-                  <Paper key={index} p="md" style={{ 
-                    backgroundColor: 'rgba(103, 215, 164, 0.1)',
-                    border: '2px solid #67D7A4',
-                    borderRadius: '12px',
-                    boxShadow: '0 4px 6px rgba(0, 131, 99, 0.1)',
-                    marginBottom: '16px'
-                  }}>
-                    <Stack spacing="xs">
-                      <Text weight={600} c="#045944" size="lg">Question:</Text>
-                      <Text c="#008363" size="md" style={{ paddingLeft: '8px' }}>{result.question}</Text>
-                      <Text weight={600} c="#045944" size="lg">Answer:</Text>
-                      <Text c="#008363" size="md" style={{ paddingLeft: '8px' }}>{result.answer_key}</Text>
-                      <Text weight={600} c="#045944" size="lg">Entity:</Text>
-                      <Text c="#008363" size="md" style={{ paddingLeft: '8px' }}>{result.entity || '-'}</Text>
-                      {result.comment && (
-                        <>
-                          <Text weight={600} c="#045944" size="lg">Comment:</Text>
-                          <Text c="#008363" size="md" style={{ paddingLeft: '8px' }}>{result.comment}</Text>
-                        </>
-                      )}
+                  <Paper key={index} p="md" withBorder>
+                    <Stack spacing="sm">
+                      <Group position="apart">
+                        <Stack spacing={4}>
+                          <Text weight={600}>Question</Text>
+                          <Text>{result.question}</Text>
+                        </Stack>
+                        {result.entity && (
+                          <Badge size="lg" variant="light">
+                            {result.entity}
+                          </Badge>
+                        )}
+                      </Group>
+                      <Stack spacing={4}>
+                        <Text weight={600}>Answer</Text>
+                        <Text>{result.answer_key}</Text>
+                      </Stack>
                       {result.created_at && (
-                        <Text size="sm" c="dimmed" style={{ 
-                          marginTop: '8px',
-                          paddingTop: '8px',
-                          borderTop: '1px solid #67D7A4'
-                        }}>
-                          Added: {new Date(result.created_at).toLocaleDateString()}
+                        <Text size="sm" c="dimmed">
+                          Added {new Date(result.created_at).toLocaleDateString()}
                         </Text>
                       )}
                     </Stack>
@@ -1215,8 +784,8 @@ function MainView({ onViewDatabase }) {
             </Stack>
           )}
         </Modal>
-        </Stack>
-      </Container>
+      </Stack>
+    </Container>
   )
 }
 
@@ -1225,22 +794,92 @@ function MainView({ onViewDatabase }) {
  */
 function App() {
   const [currentView, setCurrentView] = useState('main')
+  const [opened, setOpened] = useState(false)
+
+  const renderContent = () => {
+    switch (currentView) {
+      case 'main':
+        return <MainView onViewDatabase={() => setCurrentView('knowledge-base')} />
+      case 'knowledge-base':
+        return <DatabaseView onBack={() => setCurrentView('main')} />
+      case 'questionnaire-management':
+        return <QuestionnaireManagement />
+      case 'metrics':
+        return (
+          <Container size="xl" py={40}>
+            <Title order={1}>Metrics</Title>
+            <Text c="dimmed">Coming soon...</Text>
+          </Container>
+        )
+      case 'backlog':
+        return (
+          <Container size="xl" py={40}>
+            <Title order={1}>Questionnaire Backlog</Title>
+            <Text c="dimmed">Coming soon...</Text>
+          </Container>
+        )
+      default:
+        return <DatabaseView onBack={() => setCurrentView('main')} />
+    }
+  }
 
   return (
     <MantineProvider theme={theme}>
-      <div style={{ 
-        backgroundColor: '#2D2D2D', 
-        minHeight: '100vh',
-        backgroundImage: 'linear-gradient(180deg, rgba(4, 89, 68, 0.1) 0%, rgba(45, 45, 45, 1) 100%)',
-        backdropFilter: 'blur(10px)',
-        WebkitBackdropFilter: 'blur(10px)'
-      }}>
-        {currentView === 'main' ? (
-          <MainView onViewDatabase={() => setCurrentView('database')} />
-        ) : (
-          <DatabaseView onBack={() => setCurrentView('main')} />
-        )}
-      </div>
+      <AppShell
+        header={{ height: 60 }}
+        navbar={{
+          width: 300,
+          breakpoint: 'sm',
+          collapsed: { mobile: !opened }
+        }}
+        padding="md"
+      >
+        <AppShell.Header>
+          <Group h="100%" px="md">
+            <Burger opened={opened} onClick={() => setOpened(o => !o)} hiddenFrom="sm" size="sm" />
+            <Text>Questionnaire Management System</Text>
+          </Group>
+        </AppShell.Header>
+
+        <AppShell.Navbar p="md">
+          <Stack>
+            <NavLink
+              icon={<IconHome size={20} />}
+              label="Home"
+              active={currentView === 'main'}
+              onClick={() => setCurrentView('main')}
+            />
+            <NavLink
+              icon={<IconDatabase size={20} />}
+              label="Knowledge Base"
+              active={currentView === 'knowledge-base'}
+              onClick={() => setCurrentView('knowledge-base')}
+            />
+            <NavLink
+              icon={<IconClipboardList size={20} />}
+              label="Questionnaire Management"
+              active={currentView === 'questionnaire-management'}
+              onClick={() => setCurrentView('questionnaire-management')}
+            />
+            <NavLink
+              icon={<IconChartBar size={20} />}
+              label="Metrics"
+              active={currentView === 'metrics'}
+              onClick={() => setCurrentView('metrics')}
+            />
+            <NavLink
+              icon={<IconInbox size={20} />}
+              label="Questionnaire Backlog"
+              active={currentView === 'backlog'}
+              onClick={() => setCurrentView('backlog')}
+            />
+          </Stack>
+        </AppShell.Navbar>
+
+        <AppShell.Main style={{ backgroundColor: '#f8f9fa' }}>
+          {renderContent()}
+        </AppShell.Main>
+      </AppShell>
     </MantineProvider>
   )
 }

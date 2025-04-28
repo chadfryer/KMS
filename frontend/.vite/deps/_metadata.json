@@ -7,25 +7,25 @@
     "react": {
       "src": "../../node_modules/react/index.js",
       "file": "react.js",
-      "fileHash": "48b06486",
+      "fileHash": "744e0bca",
       "needsInterop": true
     },
     "react-dom/client": {
       "src": "../../node_modules/react-dom/client.js",
       "file": "react-dom_client.js",
-      "fileHash": "17b50018",
+      "fileHash": "78f6ab75",
       "needsInterop": true
     },
     "@mantine/core": {
       "src": "../../node_modules/@mantine/core/esm/index.mjs",
       "file": "@mantine_core.js",
-      "fileHash": "955e844c",
+      "fileHash": "26cd59d3",
       "needsInterop": false
     },
     "@tabler/icons-react": {
       "src": "../../node_modules/@tabler/icons-react/dist/esm/tabler-icons-react.mjs",
       "file": "@tabler_icons-react.js",
-      "fileHash": "ebffd317",
+      "fileHash": "2c3bbf80",
       "needsInterop": false
     }
   },

@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react'
-import { Container, Title, Paper, Stack, Text, Button, Table, Loader, ScrollArea, TextInput, Group, Pagination, ActionIcon, Select } from '@mantine/core'
-import { IconSearch, IconArrowLeft, IconArrowUp, IconArrowDown } from '@tabler/icons-react'
+import { Container, Title, Paper, Stack, Text, Button, Loader, ScrollArea, TextInput, Group, Pagination, ActionIcon, Select, Box, Badge } from '@mantine/core'
+import { IconSearch, IconArrowUp, IconArrowDown } from '@tabler/icons-react'
 
 function DatabaseView({ onBack }) {
   const [questions, setQuestions] = useState([])
@@ -50,30 +50,32 @@ function DatabaseView({ onBack }) {
 
   const handleSearch = async (e) => {
     e.preventDefault()
-    if (!searchQuery.trim()) return
+    if (!searchQuery.trim() && !selectedEntity) return
 
     setIsSearching(true)
     setError(null)
 
     try {
-      const params = new URLSearchParams()
-      params.append('query', searchQuery)
-      if (selectedEntity) {
-        params.append('entity', selectedEntity)
-      }
-      
-      const response = await fetch(`http://localhost:8000/search?${params.toString()}`)
-      
-      if (!response.ok) {
-        const errorData = await response.json()
-        throw new Error(errorData.message || 'Failed to search questions')
+      let filtered = [...questions]
+
+      // Filter by search query
+      if (searchQuery.trim()) {
+        filtered = filtered.filter(q => 
+          q.question.toLowerCase().includes(searchQuery.toLowerCase()) ||
+          q.answer_key.toLowerCase().includes(searchQuery.toLowerCase())
+        )
       }
 
-      const data = await response.json()
-      setFilteredQuestions(data.results)
+      // Filter by entity
+      if (selectedEntity) {
+        filtered = filtered.filter(q => q.entity === selectedEntity)
+      }
+
+      setFilteredQuestions(filtered)
+      setCurrentPage(1) // Reset to first page when filtering
     } catch (error) {
-      console.error('Error searching questions:', error)
-      setError(error.message || 'Failed to search questions. Please try again.')
+      console.error('Error filtering questions:', error)
+      setError(error.message || 'Failed to filter questions. Please try again.')
     } finally {
       setIsSearching(false)
     }
@@ -129,228 +131,153 @@ function DatabaseView({ onBack }) {
   )
 
   return (
-    <Container size="md" py={40}>
+    <Container size="xl" py={40}>
       <Stack spacing={40}>
-        <div style={{ 
-          position: 'relative', 
-          textAlign: 'center', 
-          width: '100%',
-          marginBottom: '20px',
-          display: 'flex',
-          flexDirection: 'column',
-          alignItems: 'center'
-        }}>
-          <Button
-            onClick={onBack}
-            variant="filled"
-            leftSection={<IconArrowLeft size={20} />}
-            style={{
-              position: 'absolute',
-              right: '-200px',
-              top: 0,
-              backgroundColor: '#008363',
-              color: '#FFFFFF',
-              border: 'none',
-              boxShadow: '0 4px 6px rgba(0, 131, 99, 0.1)',
-              transition: 'transform 0.2s, box-shadow 0.2s',
-              '&:hover': {
-                backgroundColor: '#045944',
-                transform: 'translateY(-2px)',
-                boxShadow: '0 6px 8px rgba(0, 131, 99, 0.15)'
-              }
-            }}
-          >
-            Back to Main
-          </Button>
-          <div style={{ width: '100%', textAlign: 'center' }}>
-            <Title 
-              order={1}
-              size="42px"
-              c="spearmint"
-              mb="xs"
-            >
-              Knowledge Base
-            </Title>
-            <Text c="juniper" size="lg">
-              {questions.length} question-answer pairs in the database
-            </Text>
-          </div>
-        </div>
+        <Group position="apart" align="center">
+          <Title order={1} size={32}>Knowledge Base</Title>
+          <Badge size="lg" variant="light" color="blue">
+            {questions.length} Questions
+          </Badge>
+        </Group>
 
-        <Paper 
-          p="md" 
-          style={{ 
-            backgroundColor: '#FFFFFF',
-            border: '2px solid #67D7A4',
-            backdropFilter: 'blur(8px)',
-            WebkitBackdropFilter: 'blur(8px)',
-            boxShadow: '0 4px 6px rgba(0, 0, 0, 0.1)',
-            borderRadius: '12px',
-            marginTop: '20px'
-          }}
-        >
-          <form onSubmit={handleSearch}>
-            <Stack spacing="md">
-              <TextInput
-                label="Search Query"
-                description="Enter keywords to search questions, answers, or comments"
-                placeholder="e.g., encryption, password, security"
-                value={searchQuery}
-                onChange={(e) => setSearchQuery(e.target.value)}
-                icon={<IconSearch size={16} />}
-                styles={{
-                  label: { 
-                    color: '#045944',
-                    fontWeight: 600,
-                    marginBottom: 4
-                  },
-                  description: {
-                    color: '#008363'
-                  },
-                  input: { 
-                    backgroundColor: '#FFFFFF',
-                    color: '#045944',
-                    borderColor: '#67D7A4',
-                    '&:focus': {
-                      borderColor: '#045944'
-                    }
-                  }
-                }}
-              />
-              <Select
-                label="Filter by Entity"
-                description="Select an entity to filter search results"
-                placeholder="All entities"
-                data={[
-                  { value: '', label: 'All entities' },
-                  ...questions
-                    .filter(q => q.entity && q.entity.trim() !== '')
-                    .map(q => q.entity)
-                    .filter((entity, index, self) => self.indexOf(entity) === index)
-                    .map(entity => ({
-                      value: entity,
-                      label: entity
-                    }))
-                ]}
-                value={selectedEntity}
-                onChange={setSelectedEntity}
-                styles={{
-                  label: { 
-                    color: '#045944',
-                    fontWeight: 600,
-                    marginBottom: 4
-                  },
-                  description: {
-                    color: '#008363'
-                  },
-                  input: { 
-                    backgroundColor: '#FFFFFF',
-                    color: '#045944',
-                    borderColor: '#67D7A4',
-                    '&:focus': {
-                      borderColor: '#045944'
-                    }
-                  }
-                }}
-              />
-              <Button 
-                type="submit" 
-                loading={isSearching}
-                style={{
-                  backgroundColor: '#008363',
-                  boxShadow: '0 4px 6px rgba(0, 131, 99, 0.1)',
-                  transition: 'transform 0.2s, box-shadow 0.2s',
-                  '&:hover': {
-                    backgroundColor: '#045944',
-                    transform: 'translateY(-2px)',
-                    boxShadow: '0 6px 8px rgba(0, 131, 99, 0.15)'
-                  }
-                }}
-              >
-                Search
+        <Paper p="xl" radius="lg" withBorder>
+          <Stack spacing="lg">
+            <form onSubmit={handleSearch}>
+              <Stack spacing="md">
+                <TextInput
+                  placeholder="Search questions..."
+                  value={searchQuery}
+                  onChange={(e) => setSearchQuery(e.target.value)}
+                  icon={<IconSearch size={18} />}
+                  size="md"
+                />
+                
+                <Select
+                  placeholder="Filter by entity"
+                  value={selectedEntity}
+                  onChange={setSelectedEntity}
+                  data={[
+                    { value: '', label: 'All entities' },
+                    ...Array.from(new Set(questions.map(q => q.entity)))
+                      .filter(Boolean)
+                      .map(entity => ({
+                        value: entity,
+                        label: entity
+                      }))
+                  ]}
+                  clearable
+                  size="md"
+                />
+
+                <Group position="right">
+                  <Button 
+                    variant="subtle" 
+                    onClick={() => {
+                      setSearchQuery('')
+                      setSelectedEntity('')
+                      setFilteredQuestions(questions)
+                    }}
+                  >
+                    Clear Filters
+                  </Button>
+                  <Button 
+                    type="submit" 
+                    loading={isSearching}
+                  >
+                    Search
+                  </Button>
+                </Group>
+              </Stack>
+            </form>
+          </Stack>
+        </Paper>
+
+        {isLoading ? (
+          <Paper p="xl" radius="lg" withBorder>
+            <Stack align="center" spacing="md" py={40}>
+              <Loader size="lg" />
+              <Text size="sm" c="dimmed">Loading questions...</Text>
+            </Stack>
+          </Paper>
+        ) : error ? (
+          <Paper p="xl" radius="lg" withBorder>
+            <Stack align="center" spacing="md" py={40}>
+              <Text c="red" size="lg">{error}</Text>
+              <Button variant="light" color="red" onClick={() => window.location.reload()}>
+                Try Again
               </Button>
             </Stack>
-          </form>
-        </Paper>
+          </Paper>
+        ) : (
+          <Paper p="xl" radius="lg" withBorder>
+            <Stack spacing="xl">
+              {paginatedQuestions.map((question, index) => (
+                <Paper
+                  key={question.id || index}
+                  p="lg"
+                  radius="md"
+                  withBorder
+                  style={{
+                    backgroundColor: index % 2 === 0 ? '#fff' : '#f8f9fa'
+                  }}
+                >
+                  <Stack spacing="md">
+                    <Group position="apart" align="flex-start">
+                      <Box style={{ flex: 1 }}>
+                        <Text size="sm" weight={500} c="dimmed" mb={4}>
+                          Question
+                        </Text>
+                        <Text size="md">{question.question}</Text>
+                      </Box>
+                      <Box style={{ flex: 1 }}>
+                        <Text size="sm" weight={500} c="dimmed" mb={4}>
+                          Answer
+                        </Text>
+                        <Text size="md">{question.answer_key}</Text>
+                      </Box>
+                    </Group>
+                    
+                    <Group position="apart" align="center">
+                      <Stack spacing={4}>
+                        {question.entity && (
+                          <>
+                            <Text size="sm" weight={500} c="dimmed" mb={4}>
+                              Entity
+                            </Text>
+                            <Badge size="lg" variant="dot">
+                              {question.entity}
+                            </Badge>
+                          </>
+                        )}
+                        {question.created_at && (
+                          <Text size="sm" c="dimmed">
+                            Added {formatDate(question.created_at)}
+                          </Text>
+                        )}
+                      </Stack>
+                    </Group>
+                  </Stack>
+                </Paper>
+              ))}
 
-        <Paper p="md" style={{ backgroundColor: '#F8F9FA' }}>
-          <Stack spacing="md">
-            {paginatedQuestions.map((q, index) => (
-              <div key={q.id} style={{ 
-                padding: '20px', 
-                borderBottom: '1px solid #67D7A4',
-                backgroundColor: index % 2 === 0 ? '#FFFFFF' : 'rgba(103, 215, 164, 0.05)',
-                borderRadius: '8px',
-                marginBottom: '8px',
-                ...(paginatedQuestions.indexOf(q) === paginatedQuestions.length - 1 && { borderBottom: 'none' })
-              }}>
-                <Stack spacing="xs">
-                  <Text weight={600} c="#045944">Question:</Text>
-                  <Text c="#008363">{q.question}</Text>
-                  <Text weight={600} c="#045944">Answer:</Text>
-                  <Text c="#008363">{q.answer_key}</Text>
-                  <Text weight={600} c="#045944">Entity:</Text>
-                  <Text c="#008363">{q.entity || '-'}</Text>
-                  {q.comment && (
-                    <>
-                      <Text weight={600} c="#045944">Comment:</Text>
-                      <Text c="#008363">{q.comment}</Text>
-                    </>
-                  )}
+              {totalPages > 1 && (
+                <Group position="apart" pt="lg">
                   <Text size="sm" c="dimmed">
-                    Added: {formatDate(q.created_at)}
+                    Showing {paginatedQuestions.length} of {sortedQuestions.length} questions
                   </Text>
-                </Stack>
-              </div>
-            ))}
-          </Stack>
-          
-          {/* Add pagination controls */}
-          {totalPages > 1 && (
-            <div style={{ 
-              display: 'flex', 
-              justifyContent: 'center',
-              marginTop: '20px',
-              padding: '20px 0',
-              borderTop: '1px solid #67D7A4'
-            }}>
-              <Pagination
-                value={currentPage}
-                onChange={setCurrentPage}
-                total={totalPages}
-                color="juniper"
-                radius="md"
-                withEdges
-                styles={{
-                  control: {
-                    '&[data-active]': {
-                      backgroundColor: '#008363',
-                      borderColor: '#008363',
-                      '&:not(:disabled):hover': {
-                        backgroundColor: '#045944',
-                      },
-                    },
-                    '&:not(:disabled):hover': {
-                      backgroundColor: 'rgba(103, 215, 164, 0.1)',
-                    },
-                  }
-                }}
-              />
-            </div>
-          )}
-          
-          {/* Add total results count */}
-          <Text 
-            size="sm" 
-            c="dimmed" 
-            style={{ 
-              textAlign: 'center',
-              marginTop: '10px'
-            }}
-          >
-            Showing {paginatedQuestions.length} of {sortedQuestions.length} results
-          </Text>
-        </Paper>
+                  <Pagination
+                    value={currentPage}
+                    onChange={setCurrentPage}
+                    total={totalPages}
+                    size="md"
+                    radius="md"
+                    withEdges
+                  />
+                </Group>
+              )}
+            </Stack>
+          </Paper>
+        )}
       </Stack>
     </Container>
   )

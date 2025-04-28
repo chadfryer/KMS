@@ -11,8 +11,9 @@
 import React, { useState, useEffect } from 'react'
 import { MantineProvider } from '@mantine/core'
 import { AppShell, Burger } from '@mantine/core'
-import { Container, Title, Paper, Textarea, Button, Stack, Text, Group, FileInput, TextInput, Loader, Modal, Select, Alert, Badge, Tooltip } from '@mantine/core'
-import { IconUpload, IconSearch, IconDatabase, IconArrowLeft, IconInfoCircle, IconHome, IconClipboardList, IconChartBar, IconInbox } from '@tabler/icons-react'
+import { Container, Title, Paper, Textarea, Button, Stack, Text, Group, FileInput, TextInput, Loader, Modal, Select, Alert, Badge, Tooltip, Box } from '@mantine/core'
+import { IconUpload, IconSearch, IconDatabase, IconArrowLeft, IconInfoCircle, IconHome, IconClipboardList, IconChartBar, IconInbox, IconBulb, IconBook } from '@tabler/icons-react'
+import headerImage from './assets/header-image.png'
 import DatabaseView from './DatabaseView'
 import QuestionnaireManagement from './QuestionnaireManagement'
 
@@ -191,6 +192,32 @@ function NavLink({ icon, label, active, onClick }) {
     >
       {label}
     </Button>
+  )
+}
+
+const Logo = () => {
+  return (
+    <Group spacing={16} align="center" style={{ flex: 1 }}>
+      <Group spacing={8} style={{ flex: 1 }}>
+        <IconBulb size={24} style={{ color: '#CC0000' }} />
+        <IconBook size={24} style={{ color: '#CC0000' }} />
+        <IconSearch size={24} style={{ color: '#CC0000' }} />
+      </Group>
+      <Title 
+        order={1} 
+        size="h4" 
+        style={{ 
+          fontFamily: 'Inter, -apple-system, BlinkMacSystemFont, Segoe UI, Roboto, Helvetica, Arial, sans-serif',
+          fontWeight: 900,
+          color: '#FFFFFF',
+          textTransform: 'uppercase',
+          letterSpacing: '0.5px',
+          margin: 0
+        }}
+      >
+        Chad's Knowledge Management
+      </Title>
+    </Group>
   )
 }
 
@@ -605,7 +632,7 @@ function MainView({ onViewDatabase }) {
               <Stack spacing="md">
                 <Textarea
                   label="Question"
-                  description="Enter the question you want to add to the knowledge base"
+                  description={<Box component="span" c="#FFFFFF" style={{ fontSize: '14px' }}>Enter the question you want to add to the knowledge base</Box>}
                   placeholder="e.g., What are the operating hours?"
                   required
                   value={newQuestion}
@@ -621,7 +648,7 @@ function MainView({ onViewDatabase }) {
                 />
                 <Textarea
                   label="Answer"
-                  description="Provide a clear and concise answer to the question"
+                  description={<Box component="span" c="#FFFFFF" style={{ fontSize: '14px' }}>Provide a clear and concise answer to the question</Box>}
                   placeholder="e.g., Our operating hours are Monday to Friday, 9 AM to 5 PM"
                   required
                   value={newAnswerKey}
@@ -637,7 +664,7 @@ function MainView({ onViewDatabase }) {
                 />
                 <TextInput
                   label="Entity"
-                  description="Specify the entity or category this Q&A belongs to"
+                  description={<Box component="span" c="#FFFFFF" style={{ fontSize: '14px' }}>Specify the entity or category this Q&A belongs to</Box>}
                   placeholder="e.g., Mindbody, ClassPass"
                   required
                   value={newEntity}
@@ -882,7 +909,6 @@ function App() {
   return (
     <MantineProvider theme={theme}>
       <AppShell
-        header={{ height: 60 }}
         navbar={{
           width: 300,
           breakpoint: 'sm',
@@ -890,15 +916,18 @@ function App() {
         }}
         padding="md"
       >
-        <AppShell.Header>
-          <Group h="100%" px="md">
-            <Burger opened={opened} onClick={() => setOpened(o => !o)} hiddenFrom="sm" size="sm" />
-            <Text>Questionnaire Management System</Text>
-          </Group>
-        </AppShell.Header>
-
         <AppShell.Navbar p="md">
           <Stack>
+            <Group justify="center" mb="md">
+              <img 
+                src={headerImage} 
+                alt="Chad's Knowledge Management" 
+                style={{ 
+                  height: '180px',
+                  objectFit: 'contain'
+                }} 
+              />
+            </Group>
             <NavLink
               icon={<IconHome size={20} />}
               label="Home"

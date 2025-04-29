@@ -99,8 +99,8 @@ function KnowledgeBaseUpload() {
 
   return (
     <Container size="xl" py={40}>
-      <Stack>
-        <Group position="apart" align="center" mb={10}>
+      <Stack spacing={40}>
+        <Group position="apart" align="center">
           <Stack spacing={4}>
             <Title order={1} size={32}>Upload Knowledge</Title>
             <Text c="dimmed" size="lg">Upload and manage your knowledge base entries.</Text>

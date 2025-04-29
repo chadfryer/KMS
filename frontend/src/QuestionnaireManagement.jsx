@@ -28,6 +28,67 @@ function QuestionnaireManagement() {
     }
   }
 
+  // Download CSV function as a component method
+  const downloadCsv = () => {
+    if (!processingResults) return;
+    
+    logDebug('Download', 'Current state:', { editedAnswers, acceptedAnswers });
+    
+    const processedResults = processingResults.map((result, index) => {
+      let answer = '';
+      
+      if (result.best_match) {
+        const hasLowConfidence = result.best_match.similarity < 0.5;
+        
+        logDebug('Processing', `Question ${index + 1}:`, {
+          hasLowConfidence,
+          isAccepted: acceptedAnswers[index],
+          editedAnswer: editedAnswers[index],
+          originalAnswer: result.best_match.answer_key
+        });
+
+        if (hasLowConfidence && acceptedAnswers[index] === true && editedAnswers[index]) {
+          answer = editedAnswers[index];
+          logDebug('Answer', `Using edited answer for question ${index + 1}:`, answer);
+        } else {
+          answer = result.best_match.answer_key;
+          logDebug('Answer', `Using original answer for question ${index + 1}:`, answer);
+        }
+      }
+
+      return {
+        question: result.input_question,
+        answer: answer,
+        confidence: result.best_match ? Math.round(result.best_match.similarity * 100) + '%' : '0%'
+      };
+    });
+
+    logDebug('Download', 'Final processed results:', processedResults);
+
+    const headers = ['Question', 'Answer', 'Confidence'];
+    const csvRows = [
+      headers.join(','),
+      ...processedResults.map(row => 
+        [
+          `"${row.question.replace(/"/g, '""')}"`,
+          `"${row.answer.replace(/"/g, '""')}"`,
+          row.confidence
+        ].join(',')
+      )
+    ];
+    const csvContent = csvRows.join('\n');
+
+    const blob = new Blob([csvContent], { type: 'text/csv' });
+    const url = window.URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = 'processed_questionnaire.csv';
+    document.body.appendChild(a);
+    a.click();
+    window.URL.revokeObjectURL(url);
+    document.body.removeChild(a);
+  };
+
   const handleProcessQuestionnaire = async () => {
     if (!questionnaireFile) {
       logDebug('Error', 'No file selected')
@@ -115,61 +176,6 @@ function QuestionnaireManagement() {
           message: `Processed ${data.results.length} questions successfully`
         })
         setCurrentResults(data.results)
-
-        // Move CSV download to after user has reviewed results
-        if (data.csv_content) {
-          const downloadCsv = () => {
-            // Get the current state of answers including accepted edits
-            const processedResults = data.results.map((result, index) => {
-              const hasLowConfidence = result.best_match && result.best_match.similarity < 0.5;
-              let answer = '';
-              
-              if (result.best_match) {
-                if (hasLowConfidence && acceptedAnswers[index] && editedAnswers[index]) {
-                  // Use accepted edited answer for low confidence matches
-                  answer = editedAnswers[index];
-                } else {
-                  // Use original answer for high confidence or unedited matches
-                  answer = result.best_match.answer_key;
-                }
-              }
-
-              return {
-                question: result.input_question,
-                answer: answer,
-                confidence: result.best_match ? Math.round(result.best_match.similarity * 100) + '%' : '0%'
-              };
-            });
-
-            // Convert to CSV format
-            const headers = ['Question', 'Answer', 'Confidence'];
-            const csvRows = [
-              headers.join(','),
-              ...processedResults.map(row => 
-                [
-                  `"${row.question.replace(/"/g, '""')}"`,
-                  `"${row.answer.replace(/"/g, '""')}"`,
-                  row.confidence
-                ].join(',')
-              )
-            ];
-            const csvContent = csvRows.join('\n');
-
-            const blob = new Blob([csvContent], { type: 'text/csv' })
-            const url = window.URL.createObjectURL(blob)
-            const a = document.createElement('a')
-            a.href = url
-            a.download = data.filename || 'processed_questionnaire.csv'
-            document.body.appendChild(a)
-            a.click()
-            window.URL.revokeObjectURL(url)
-            document.body.removeChild(a)
-            logDebug('Download', 'CSV file downloaded successfully')
-          }
-          
-          // Store download function for later use
-          window.downloadProcessedQuestionnaire = downloadCsv
-        }
       }
     } catch (error) {
       logDebug('Error', 'Error processing questionnaire:', error)
@@ -196,10 +202,12 @@ function QuestionnaireManagement() {
   };
 
   const handleAcceptAnswer = (index) => {
-    setAcceptedAnswers(prev => ({
-      ...prev,
-      [index]: true
-    }));
+    if (editedAnswers[index]) {
+      setAcceptedAnswers(prev => ({
+        ...prev,
+        [index]: true
+      }));
+    }
   };
 
   const handleEditAcceptedAnswer = (index) => {
@@ -210,10 +218,10 @@ function QuestionnaireManagement() {
   };
 
   return (
-    <Container size="lg">
-      <Stack spacing="md">
-        <Title order={2} mb="lg">Process Questionnaire</Title>
-        <Text color="dimmed" size="sm">
+    <Container size="xl">
+      <Stack spacing="md" mt={40}>
+        <Title order={1} size={36}>Process Questionnaire</Title>
+        <Text size="lg" c="dimmed">
           Upload a questionnaire CSV file to have it automatically filled out using the knowledge base.
           The system will attempt to match each question with the most relevant answer from the knowledge base.
         </Text>
@@ -221,7 +229,7 @@ function QuestionnaireManagement() {
         <Paper shadow="xs" p="md">
           <Stack spacing="md">
             <Group position="apart">
-              <Title order={2} size={24}>Upload Customer Questionnaire</Title>
+              <Title order={2} size={28}>Upload Customer Questionnaire</Title>
               <Tooltip label="Upload a questionnaire to be processed against the knowledge base" position="left">
                 <IconInfoCircle size={20} style={{ color: '#94A3B8' }} />
               </Tooltip>
@@ -229,15 +237,15 @@ function QuestionnaireManagement() {
             <Stack spacing="md">
               <FileInput
                 placeholder="Choose questionnaire file"
-                label={<Text c="#FFFFFF" fw={700}>Questionnaire</Text>}
-                description={<Text c="dimmed" size="sm" component="span">Upload a CSV file containing questions to be processed</Text>}
+                label={<Text size="sm" fw={600} c="#FFFFFF">Questionnaire</Text>}
+                description={<Text c="#94A3B8" size="sm" component="span">Upload a CSV file containing questions to be processed</Text>}
                 accept=".csv"
                 value={questionnaireFile}
                 onChange={setQuestionnaireFile}
               />
               <Select
-                label={<Text c="#FFFFFF" fw={700}>Filter by Entity</Text>}
-                description={<Text c="dimmed" size="sm" component="span">Optionally limit matches to a specific entity</Text>}
+                label={<Text size="sm" fw={600} c="#FFFFFF">Filter by Entity</Text>}
+                description={<Text c="#94A3B8" size="sm" component="span">Optionally limit matches to a specific entity</Text>}
                 placeholder="Select entity"
                 data={[
                   { value: 'Mindbody', label: 'Mindbody' },
@@ -297,16 +305,16 @@ function QuestionnaireManagement() {
         </Paper>
 
         {processingResults && processingResults.length > 0 && (
-          <Paper shadow="xs" p="md" pos="relative">
+          <Paper shadow="xs" p="md" pos="relative" mt="xl">
             <Button 
-              onClick={() => window.downloadProcessedQuestionnaire()} 
+              onClick={downloadCsv}
               variant="light"
               style={{ position: 'absolute', top: '16px', right: '16px' }}
             >
               Download CSV
             </Button>
             <Stack spacing="xl">
-              <Title order={4}>Processed Results</Title>
+              <Title order={2} size={28}>Processed Results</Title>
               <Stack spacing="xl" mt={40}>
                 {processingResults.map((result, index) => (
                   <Paper 
@@ -329,7 +337,7 @@ function QuestionnaireManagement() {
                         </Badge>
                       )}
                     </Group>
-                    <Text size="sm" c={result.best_match && result.best_match.similarity < 0.5 ? 'dark' : 'dimmed'} mb="xs">
+                    <Text size="sm" c={result.best_match && result.best_match.similarity < 0.5 ? 'dark' : undefined} mb="xs">
                       <Text component="span" fw={700} c={result.best_match && result.best_match.similarity < 0.5 ? 'dark' : undefined}>Original: </Text>
                       {result.input_question}
                     </Text>
@@ -338,7 +346,7 @@ function QuestionnaireManagement() {
                         <Text size="sm" weight={500} mt="md">
                           <Text component="span" fw={700} c={result.best_match.similarity < 0.5 ? 'dark' : undefined}>Best Match:</Text>
                         </Text>
-                        <Text size="sm" c={result.best_match.similarity < 0.5 ? 'dark' : 'dimmed'} mb="xs">
+                        <Text size="sm" c={result.best_match.similarity < 0.5 ? 'dark' : undefined} mb="xs">
                           <Text component="span" fw={700} c={result.best_match.similarity < 0.5 ? 'dark' : undefined}>Question: </Text>
                           {result.best_match.question}
                         </Text>

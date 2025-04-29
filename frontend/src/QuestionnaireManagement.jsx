@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react'
-import { Container, Title, Paper, Stack, Text, Button, FileInput, Select, Group, Box, Badge, Alert, Progress } from '@mantine/core'
-import { IconUpload } from '@tabler/icons-react'
+import { Container, Title, Paper, Stack, Text, Button, FileInput, Select, Group, Box, Badge, Alert, Progress, Tooltip } from '@mantine/core'
+import { IconUpload, IconInfoCircle } from '@tabler/icons-react'
 
 function QuestionnaireManagement() {
   // State management
@@ -155,19 +155,24 @@ function QuestionnaireManagement() {
 
         <Paper shadow="xs" p="md">
           <Stack spacing="md">
-            <Group>
+            <Group position="apart">
+              <Title order={2} size={24}>Upload Customer Questionnaire</Title>
+              <Tooltip label="Upload a questionnaire to be processed against the knowledge base" position="left">
+                <IconInfoCircle size={20} style={{ color: '#94A3B8' }} />
+              </Tooltip>
+            </Group>
+            <Stack spacing="md">
               <FileInput
                 placeholder="Choose questionnaire file"
-                label="Questionnaire CSV"
-                description="Upload a CSV file containing questions to be processed"
+                label={<Text c="#FFFFFF" fw={700}>Questionnaire</Text>}
+                description={<Text c="dimmed" size="sm" component="span">Upload a CSV file containing questions to be processed</Text>}
                 accept=".csv"
                 value={questionnaireFile}
                 onChange={setQuestionnaireFile}
-                style={{ flex: 1 }}
               />
               <Select
-                label="Filter Entity"
-                description="Optionally limit matches to a specific entity"
+                label={<Text c="#FFFFFF" fw={700}>Filter by Entity</Text>}
+                description={<Text c="dimmed" size="sm" component="span">Optionally limit matches to a specific entity</Text>}
                 placeholder="Select entity"
                 data={[
                   { value: 'Mindbody', label: 'Mindbody' },
@@ -175,17 +180,17 @@ function QuestionnaireManagement() {
                 ]}
                 value={selectedEntity}
                 onChange={setSelectedEntity}
-                style={{ width: '200px' }}
               />
-              <Button
-                onClick={handleProcessQuestionnaire}
-                loading={isProcessing}
-                disabled={!questionnaireFile}
-                mt="auto"
-              >
-                Process Questionnaire
-              </Button>
-            </Group>
+              <Group position="right">
+                <Button
+                  onClick={handleProcessQuestionnaire}
+                  loading={isProcessing}
+                  disabled={!questionnaireFile}
+                >
+                  Process Questionnaire
+                </Button>
+              </Group>
+            </Stack>
 
             {isProcessing && (
               <Paper p="md" withBorder>
@@ -235,13 +240,13 @@ function QuestionnaireManagement() {
             >
               Download CSV
             </Button>
-            <Stack spacing="md">
-              <Title order={4}>Processing Results</Title>
-              <Stack spacing="sm">
+            <Stack spacing="xl">
+              <Title order={4}>Processed Results</Title>
+              <Stack spacing="xl" mt={40}>
                 {processingResults.map((result, index) => (
                   <Paper key={index} p="md" withBorder>
                     <Group position="apart" mb="xs">
-                      <Text weight={500}>Question {index + 1}</Text>
+                      <Text fw={700}>Question {index + 1}</Text>
                       {result.best_match && (
                         <Badge 
                           color={
@@ -254,14 +259,14 @@ function QuestionnaireManagement() {
                         </Badge>
                       )}
                     </Group>
-                    <Text size="sm" color="dimmed" mb="xs">Original: {result.input_question}</Text>
+                    <Text size="sm" color="dimmed" mb="xs"><Text component="span" fw={700}>Original: </Text>{result.input_question}</Text>
                     {result.best_match ? (
                       <>
-                        <Text size="sm" weight={500} mt="md">Best Match:</Text>
-                        <Text size="sm" color="dimmed" mb="xs">Question: {result.best_match.question}</Text>
-                        <Text size="sm">Answer: {result.best_match.answer_key}</Text>
+                        <Text size="sm" weight={500} mt="md"><Text component="span" fw={700}>Best Match:</Text></Text>
+                        <Text size="sm" color="dimmed" mb="xs"><Text component="span" fw={700}>Question: </Text>{result.best_match.question}</Text>
+                        <Text size="sm"><Text component="span" fw={700}>Answer: </Text>{result.best_match.answer_key}</Text>
                         {result.best_match.comment && (
-                          <Text size="sm" mt="xs" color="blue">{result.best_match.comment}</Text>
+                          <Text size="sm" mt="xs" color="blue" fw={700}>{result.best_match.comment}</Text>
                         )}
                       </>
                     ) : (

@@ -273,7 +273,7 @@ function QuestionnaireManagement() {
                     <Badge color="blue">PROCESSING</Badge>
                   </Group>
                   <Progress
-                    animate
+                    animate="true"
                     size="xl"
                     radius="xl"
                     color="blue"

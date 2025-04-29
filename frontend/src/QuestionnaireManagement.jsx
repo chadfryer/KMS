@@ -244,9 +244,14 @@ function QuestionnaireManagement() {
               <Title order={4}>Processed Results</Title>
               <Stack spacing="xl" mt={40}>
                 {processingResults.map((result, index) => (
-                  <Paper key={index} p="md" withBorder>
+                  <Paper 
+                    key={index} 
+                    p="md" 
+                    withBorder
+                    bg={result.best_match && result.best_match.similarity < 0.5 ? 'white' : undefined}
+                  >
                     <Group position="apart" mb="xs">
-                      <Text fw={700}>Question {index + 1}</Text>
+                      <Text fw={700} c={result.best_match && result.best_match.similarity < 0.5 ? 'dark' : undefined}>Question {index + 1}</Text>
                       {result.best_match && (
                         <Badge 
                           color={
@@ -259,14 +264,32 @@ function QuestionnaireManagement() {
                         </Badge>
                       )}
                     </Group>
-                    <Text size="sm" color="dimmed" mb="xs"><Text component="span" fw={700}>Original: </Text>{result.input_question}</Text>
+                    <Text size="sm" c={result.best_match && result.best_match.similarity < 0.5 ? 'dark' : 'dimmed'} mb="xs">
+                      <Text component="span" fw={700} c={result.best_match && result.best_match.similarity < 0.5 ? 'dark' : undefined}>Original: </Text>
+                      {result.input_question}
+                    </Text>
                     {result.best_match ? (
                       <>
-                        <Text size="sm" weight={500} mt="md"><Text component="span" fw={700}>Best Match:</Text></Text>
-                        <Text size="sm" color="dimmed" mb="xs"><Text component="span" fw={700}>Question: </Text>{result.best_match.question}</Text>
-                        <Text size="sm"><Text component="span" fw={700}>Answer: </Text>{result.best_match.answer_key}</Text>
+                        <Text size="sm" weight={500} mt="md">
+                          <Text component="span" fw={700} c={result.best_match.similarity < 0.5 ? 'dark' : undefined}>Best Match:</Text>
+                        </Text>
+                        <Text size="sm" c={result.best_match.similarity < 0.5 ? 'dark' : 'dimmed'} mb="xs">
+                          <Text component="span" fw={700} c={result.best_match.similarity < 0.5 ? 'dark' : undefined}>Question: </Text>
+                          {result.best_match.question}
+                        </Text>
+                        <Text size="sm" c={result.best_match.similarity < 0.5 ? 'dark' : undefined}>
+                          <Text component="span" fw={700} c={result.best_match.similarity < 0.5 ? 'dark' : undefined}>Answer: </Text>
+                          {result.best_match.answer_key}
+                        </Text>
                         {result.best_match.comment && (
-                          <Text size="sm" mt="xs" color="blue" fw={700}>{result.best_match.comment}</Text>
+                          <Text 
+                            size="sm" 
+                            mt="xs" 
+                            fw={700}
+                            c={result.best_match.similarity < 0.5 ? 'dark' : 'white'}
+                          >
+                            {result.best_match.comment}
+                          </Text>
                         )}
                       </>
                     ) : (

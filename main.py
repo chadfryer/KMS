@@ -97,7 +97,7 @@ app = FastAPI()
 # Configure CORS to allow frontend access
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["http://localhost:5173", "http://localhost:5174", "http://localhost:3004", "http://localhost:3005", "http://localhost:3006"],  # Allow all development ports
+    allow_origins=["http://localhost:5173", "http://localhost:5174", "http://localhost:3000", "http://localhost:3001", "http://localhost:3002", "http://localhost:3004", "http://localhost:3005", "http://localhost:3006"],  # Allow all development ports
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
@@ -782,6 +782,47 @@ async def questionnaire_progress(request: Request, client_id: str):
             "Access-Control-Allow-Origin": "*",
         }
     )
+
+@app.get("/metrics/monthly-entries")
+async def get_monthly_entries():
+    """
+    Get the count of entries added to the knowledge base per month.
+    
+    Returns:
+        dict: Monthly entry counts with timestamps
+    """
+    try:
+        db = SessionLocal()
+        
+        # Query to get counts by month
+        monthly_counts = (
+            db.query(
+                func.strftime('%Y-%m', Questionnaire.created_at).label('month'),
+                func.count().label('count')
+            )
+            .group_by(func.strftime('%Y-%m', Questionnaire.created_at))
+            .order_by(func.strftime('%Y-%m', Questionnaire.created_at))
+            .all()
+        )
+        
+        # Format the results
+        results = [
+            {
+                "month": entry.month,
+                "count": entry.count
+            }
+            for entry in monthly_counts
+        ]
+        
+        return {"monthly_counts": results}
+    except Exception as e:
+        print(f"Error getting monthly metrics: {str(e)}")
+        return JSONResponse(
+            status_code=500,
+            content={"message": f"Error getting monthly metrics: {str(e)}"}
+        )
+    finally:
+        db.close()
 
 if __name__ == "__main__":
     import uvicorn

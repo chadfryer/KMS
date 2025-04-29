@@ -220,7 +220,7 @@ function QuestionnaireManagement() {
   return (
     <Container size="xl">
       <Stack spacing="md" mt={40}>
-        <Title order={1} size={36}>Process Questionnaire</Title>
+        <Title order={1} size={32}>Process Questionnaire</Title>
         <Text size="lg" c="dimmed">
           Upload a questionnaire CSV file to have it automatically filled out using the knowledge base.
           The system will attempt to match each question with the most relevant answer from the knowledge base.

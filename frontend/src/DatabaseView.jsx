@@ -141,7 +141,10 @@ function DatabaseView({ onBack }) {
     <Container size="xl" py={40}>
       <Stack spacing={40}>
         <Group position="apart" align="center">
-          <Title order={1} size={32}>Knowledge Base</Title>
+          <Stack spacing={4}>
+            <Title order={1} size={32}>Knowledge Base</Title>
+            <Text c="dimmed" size="lg">View and search through your knowledge base entries</Text>
+          </Stack>
           <Badge size="lg" variant="light" color="red" styles={{ root: { backgroundColor: '#CC0000', color: '#FFFFFF' } }}>
             {questions.length} Questions
           </Badge>

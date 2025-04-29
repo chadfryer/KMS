@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react'
-import { Container, Title, Paper, Stack, Text, Button, Loader, ScrollArea, TextInput, Group, Pagination, ActionIcon, Select, Box, Badge } from '@mantine/core'
-import { IconSearch, IconArrowUp, IconArrowDown } from '@tabler/icons-react'
+import { Container, Title, Paper, Stack, Text, Button, Loader, ScrollArea, TextInput, Group, Pagination, ActionIcon, Select, Box, Badge, Modal, Tooltip } from '@mantine/core'
+import { IconSearch, IconArrowUp, IconArrowDown, IconInfoCircle } from '@tabler/icons-react'
 
 function DatabaseView({ onBack }) {
   const [questions, setQuestions] = useState([])
@@ -10,9 +10,14 @@ function DatabaseView({ onBack }) {
   const [searchQuery, setSearchQuery] = useState('')
   const [selectedEntity, setSelectedEntity] = useState('')
   const [isSearching, setIsSearching] = useState(false)
+  const [searchResults, setSearchResults] = useState(null)
   const [sortConfig, setSortConfig] = useState({ key: 'created_at', direction: 'desc' })
   const [currentPage, setCurrentPage] = useState(1)
   const itemsPerPage = 10
+  const [searchResultsModal, setSearchResultsModal] = useState({
+    opened: false,
+    results: null
+  })
 
   useEffect(() => {
     const fetchQuestions = async () => {
@@ -50,32 +55,34 @@ function DatabaseView({ onBack }) {
 
   const handleSearch = async (e) => {
     e.preventDefault()
-    if (!searchQuery.trim() && !selectedEntity) return
+    if (!searchQuery.trim()) return
 
     setIsSearching(true)
-    setError(null)
+    setSearchResults(null)
 
     try {
-      let filtered = [...questions]
-
-      // Filter by search query
-      if (searchQuery.trim()) {
-        filtered = filtered.filter(q => 
-          q.question.toLowerCase().includes(searchQuery.toLowerCase()) ||
-          q.answer_key.toLowerCase().includes(searchQuery.toLowerCase())
-        )
-      }
-
-      // Filter by entity
+      const params = new URLSearchParams()
+      params.append('query', searchQuery)
       if (selectedEntity) {
-        filtered = filtered.filter(q => q.entity === selectedEntity)
+        params.append('entity', selectedEntity)
+      }
+      
+      const response = await fetch(`http://localhost:8000/search?${params.toString()}`)
+      
+      if (!response.ok) {
+        const errorData = await response.json()
+        throw new Error(errorData.message || 'Failed to search questions')
       }
 
-      setFilteredQuestions(filtered)
-      setCurrentPage(1) // Reset to first page when filtering
+      const data = await response.json()
+      setSearchResults(data.results)
+      setSearchResultsModal({
+        opened: true,
+        results: data.results
+      })
     } catch (error) {
-      console.error('Error filtering questions:', error)
-      setError(error.message || 'Failed to filter questions. Please try again.')
+      console.error('Error searching questions:', error)
+      setError(error.message || 'Failed to search questions. Please try again.')
     } finally {
       setIsSearching(false)
     }
@@ -141,23 +148,29 @@ function DatabaseView({ onBack }) {
         </Group>
 
         <Paper p={40} radius="lg" withBorder mb={40}>
-          <Stack spacing={40}>
+          <Stack spacing="xl">
+            <Group position="apart">
+              <Title order={2} size={24}>Search Questions</Title>
+              <Tooltip label="Search through the knowledge base using keywords or phrases" position="left">
+                <IconInfoCircle size={20} style={{ color: '#94A3B8' }} />
+              </Tooltip>
+            </Group>
             <form onSubmit={handleSearch}>
-              <Stack spacing={40}>
+              <Stack spacing="md">
                 <TextInput
-                  placeholder="Search questions..."
+                  placeholder="Enter keywords to search..."
+                  description={<Box component="span" c="dimmed" style={{ fontSize: '14px' }}>Search for questions using keywords or phrases.</Box>}
                   value={searchQuery}
                   onChange={(e) => setSearchQuery(e.target.value)}
-                  icon={<IconSearch size={18} />}
+                  icon={<IconSearch size={20} />}
                   size="md"
                 />
-                
                 <Select
-                  placeholder="Filter by entity"
-                  value={selectedEntity}
-                  onChange={setSelectedEntity}
+                  label={<Text c="#FFFFFF" fw={700}>Filter by Entity</Text>}
+                  description={<Box component="span" c="dimmed" style={{ fontSize: '14px' }}>Narrow down results to a specific entity.</Box>}
+                  placeholder="All entities"
                   data={[
-                    { value: '', label: 'All entities' },
+                    { value: '', label: 'All entities', color: '#333333' },
                     ...Array.from(new Set(questions.map(q => q.entity)))
                       .filter(Boolean)
                       .map(entity => ({
@@ -165,18 +178,20 @@ function DatabaseView({ onBack }) {
                         label: entity
                       }))
                   ]}
-                  clearable
-                  size="md"
+                  value={selectedEntity}
+                  onChange={setSelectedEntity}
                   styles={{
                     input: {
-                      color: '#333333'
+                      color: selectedEntity ? '#FFFFFF' : '#333333'
                     },
                     item: {
-                      color: '#333333'
+                      color: '#FFFFFF',
+                      '&[data-selected]': {
+                        color: '#333333'
+                      }
                     }
                   }}
                 />
-
                 <Group position="right">
                   <Button 
                     variant="subtle" 
@@ -188,12 +203,15 @@ function DatabaseView({ onBack }) {
                   >
                     Clear Filters
                   </Button>
-                  <Button 
-                    type="submit" 
-                    loading={isSearching}
-                  >
-                    Search
-                  </Button>
+                  <Tooltip label="Search the knowledge base">
+                    <Button 
+                      type="submit" 
+                      loading={isSearching}
+                      leftSection={<IconSearch size={20} />}
+                    >
+                      Search
+                    </Button>
+                  </Tooltip>
                 </Group>
               </Stack>
             </form>
@@ -341,6 +359,48 @@ function DatabaseView({ onBack }) {
             </Stack>
           </Paper>
         )}
+
+        <Modal
+          opened={searchResultsModal.opened}
+          onClose={() => setSearchResultsModal({ ...searchResultsModal, opened: false })}
+          title="Search Results"
+          size="lg"
+        >
+          {searchResultsModal.results && (
+            <Stack spacing="md">
+              {searchResultsModal.results.length === 0 ? (
+                <Text c="dimmed" ta="center">No results found</Text>
+              ) : (
+                searchResultsModal.results.map((result, index) => (
+                  <Paper key={index} p="md" withBorder>
+                    <Stack spacing="sm">
+                      <Group position="apart">
+                        <Stack spacing={4}>
+                          <Text weight={600}>Question</Text>
+                          <Text>{result.question}</Text>
+                        </Stack>
+                        {result.entity && (
+                          <Badge size="lg" variant="light">
+                            {result.entity}
+                          </Badge>
+                        )}
+                      </Group>
+                      <Stack spacing={4}>
+                        <Text weight={600}>Answer</Text>
+                        <Text>{result.answer_key}</Text>
+                      </Stack>
+                      {result.created_at && (
+                        <Text size="sm" c="dimmed">
+                          Added {new Date(result.created_at).toLocaleDateString()}
+                        </Text>
+                      )}
+                    </Stack>
+                  </Paper>
+                ))
+              )}
+            </Stack>
+          )}
+        </Modal>
       </Stack>
     </Container>
   )

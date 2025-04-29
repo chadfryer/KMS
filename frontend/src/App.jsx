@@ -11,11 +11,12 @@
 import React, { useState, useEffect } from 'react'
 import { MantineProvider } from '@mantine/core'
 import { AppShell, Burger } from '@mantine/core'
-import { Container, Title, Paper, Textarea, Button, Stack, Text, Group, FileInput, TextInput, Loader, Modal, Select, Alert, Badge, Tooltip, Box } from '@mantine/core'
+import { Container, Title, Paper, Textarea, Button, Stack, Text, Group, FileInput, TextInput, Loader, Modal, Select, Alert, Badge, Tooltip, Box, Progress } from '@mantine/core'
 import { IconUpload, IconSearch, IconDatabase, IconArrowLeft, IconInfoCircle, IconHome, IconClipboardList, IconChartBar, IconInbox, IconBulb, IconBook } from '@tabler/icons-react'
 import headerImage from './assets/header-image.png'
 import DatabaseView from './DatabaseView'
 import QuestionnaireManagement from './QuestionnaireManagement'
+import KnowledgeBaseUpload from './KnowledgeBaseUpload'
 
 // Theme configuration for the application
 const theme = {
@@ -24,7 +25,6 @@ const theme = {
     secondary: ['#3B82F6', '#3B82F6', '#3B82F6', '#3B82F6', '#3B82F6', '#3B82F6', '#3B82F6', '#3B82F6', '#3B82F6', '#3B82F6'],
     dark: ['#1E293B', '#1E293B', '#1E293B', '#1E293B', '#1E293B', '#1E293B', '#1E293B', '#1E293B', '#1E293B', '#1E293B'],
     charcoal: ['#333333', '#333333', '#333333', '#333333', '#333333', '#333333', '#333333', '#333333', '#333333', '#333333'],
-    spearmint: ['#AAFFD8', '#AAFFD8', '#AAFFD8', '#AAFFD8', '#AAFFD8', '#AAFFD8', '#AAFFD8', '#AAFFD8', '#AAFFD8', '#AAFFD8'],
     fir: ['#045944', '#045944', '#045944', '#045944', '#045944', '#045944', '#045944', '#045944', '#045944', '#045944']
   },
   primaryColor: 'primary',
@@ -140,21 +140,21 @@ const theme = {
     TextInput: {
       styles: {
         input: {
-          color: '#AAFFD8'
+          color: '#000000'
         }
       }
     },
     Textarea: {
       styles: {
         input: {
-          color: '#AAFFD8'
+          color: '#000000'
         }
       }
     },
     Select: {
       styles: {
         input: {
-          color: '#AAFFD8'
+          color: '#000000'
         }
       }
     }
@@ -244,6 +244,7 @@ function MainView({ onViewDatabase }) {
   const [isProcessing, setIsProcessing] = useState(false)
   const [processingResults, setProcessingResults] = useState(null)
   const [processStatus, setProcessStatus] = useState(null)
+  const [uploadProgress, setUploadProgress] = useState({ current: 0, total: 0, phase: 'Preparing' })
 
   const [duplicatesModal, setDuplicatesModal] = useState({
     opened: false,
@@ -343,6 +344,7 @@ function MainView({ onViewDatabase }) {
 
     setIsUploading(true)
     setUploadStatus(null)
+    setUploadProgress({ current: 0, total: 0, phase: 'Preparing' })
 
     try {
       const formData = new FormData()
@@ -643,7 +645,7 @@ function MainView({ onViewDatabase }) {
                   minRows={3}
                   styles={{
                     input: {
-                      color: '#AAFFD8',
+                      color: '#000000',
                       fontSize: '16px',
                       lineHeight: 1.6
                     }
@@ -662,7 +664,7 @@ function MainView({ onViewDatabase }) {
                   minRows={3}
                   styles={{
                     input: {
-                      color: '#AAFFD8',
+                      color: '#000000',
                       fontSize: '16px',
                       lineHeight: 1.6
                     }
@@ -680,7 +682,7 @@ function MainView({ onViewDatabase }) {
                   onChange={(e) => setNewEntity(e.target.value)}
                   styles={{
                     input: {
-                      color: '#AAFFD8'
+                      color: '#000000'
                     }
                   }}
                 />
@@ -731,13 +733,58 @@ function MainView({ onViewDatabase }) {
                   </Tooltip>
                 </Group>
               )}
-              {uploadStatus && (
+              {isUploading && (
+                <Paper p="md" withBorder>
+                  <Stack spacing="sm">
+                    <Group position="apart">
+                      <Text size="sm" fw={500}>Uploading {selectedFile?.name}</Text>
+                      <Badge color="green">{uploadProgress.phase}</Badge>
+                    </Group>
+                    <Box py={6}>
+                      <Group position="apart" align="center" mb={8}>
+                        <Text size="sm" c="dimmed">
+                          {uploadProgress.phase !== 'Complete' ? (
+                            `Processing ${uploadProgress.current} of ${uploadProgress.total} entries`
+                          ) : (
+                            'Processing complete'
+                          )}
+                        </Text>
+                        <Text size="sm" c="dimmed">
+                          {uploadProgress.total > 0 ? Math.round((uploadProgress.current / uploadProgress.total) * 100) : 0}%
+                        </Text>
+                      </Group>
+                      <Progress
+                        value={uploadProgress.total > 0 ? (uploadProgress.current / uploadProgress.total) * 100 : 0}
+                        size="xl"
+                        radius="xl"
+                        color={uploadProgress.phase === 'Complete' ? 'green' : 'blue'}
+                        animated={uploadProgress.phase !== 'Complete'}
+                        striped={true}
+                      />
+                    </Box>
+                    <Text size="xs" c="dimmed">
+                      {uploadProgress.phase === 'Preparing' && 'Preparing to process file...'}
+                      {uploadProgress.phase === 'Reading File' && 'Processing file contents and checking for duplicates...'}
+                      {uploadProgress.phase === 'Complete' && 'File processing complete'}
+                    </Text>
+                  </Stack>
+                </Paper>
+              )}
+              {uploadStatus && !isUploading && (
                 <Alert 
                   color={uploadStatus.type === 'success' ? 'green' : 'red'}
                   title={uploadStatus.type === 'success' ? 'Success' : 'Error'}
                   variant="light"
+                  icon={uploadStatus.type === 'success' ? '✓' : '⚠️'}
                 >
-                  {uploadStatus.message}
+                  <Stack spacing="xs">
+                    <Text>{uploadStatus.message}</Text>
+                    {uploadStatus.type === 'success' && uploadStatus.results && (
+                      <Text size="sm" c="dimmed">
+                        Successfully processed {uploadStatus.results.length} entries
+                      </Text>
+                    )}
+                  </Stack>
                 </Alert>
               )}
             </Stack>
@@ -905,6 +952,8 @@ function App() {
         return <MainView onViewDatabase={() => setCurrentView('knowledge-base')} />
       case 'knowledge-base':
         return <DatabaseView onBack={() => setCurrentView('main')} />
+      case 'knowledge-base-upload':
+        return <KnowledgeBaseUpload />
       case 'questionnaire-management':
         return <QuestionnaireManagement />
       case 'metrics':
@@ -956,9 +1005,15 @@ function App() {
             />
             <NavLink
               icon={<IconDatabase size={20} />}
-              label="Knowledge Base"
+              label="View Knowledge Base"
               active={currentView === 'knowledge-base'}
               onClick={() => setCurrentView('knowledge-base')}
+            />
+            <NavLink
+              icon={<IconUpload size={20} />}
+              label="Upload Knowledge"
+              active={currentView === 'knowledge-base-upload'}
+              onClick={() => setCurrentView('knowledge-base-upload')}
             />
             <NavLink
               icon={<IconClipboardList size={20} />}

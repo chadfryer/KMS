@@ -8,10 +8,10 @@ This application provides endpoints for:
 - Uploading and validating CSV files
 """
 
-from fastapi import FastAPI, Request, Form, UploadFile, File
+from fastapi import FastAPI, Request, Form, UploadFile, File, BackgroundTasks
 from fastapi.templating import Jinja2Templates
 from fastapi.staticfiles import StaticFiles
-from fastapi.responses import RedirectResponse, JSONResponse
+from fastapi.responses import RedirectResponse, JSONResponse, StreamingResponse
 from fastapi.middleware.cors import CORSMiddleware
 from sqlalchemy import create_engine, Column, Integer, String, Text, func, DateTime
 from sqlalchemy.ext.declarative import declarative_base
@@ -26,6 +26,12 @@ from datetime import datetime
 from ai_processor import AIProcessor
 import re
 import pandas as pd
+import asyncio
+from asyncio import Queue
+import threading
+
+# Global progress tracking
+progress_queues = {}
 
 # Database configuration
 SQLALCHEMY_DATABASE_URL = "sqlite:///./questionnaire.db"
@@ -91,7 +97,7 @@ app = FastAPI()
 # Configure CORS to allow frontend access
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["http://localhost:5173", "http://localhost:5174"],  # Allow both Vite ports
+    allow_origins=["http://localhost:5173", "http://localhost:5174", "http://localhost:3004", "http://localhost:3005", "http://localhost:3006"],  # Allow all development ports
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
@@ -132,13 +138,15 @@ def similar(a: str, b: str) -> float:
     # Combine word overlap and sequence similarity
     return (overlap / total + sequence_similarity) / 2
 
-def find_similar_question(db, question: str, threshold: float = 0.6):
+def find_similar_question(db, question: str, entity: str = None, threshold: float = 0.6):
     """
     Find similar questions in the database with a similarity threshold.
+    Only considers questions as similar if they have both similar text AND the same entity (if entity is provided).
     
     Args:
         db: Database session
         question (str): Question to find similar matches for
+        entity (str, optional): Entity to match against
         threshold (float): Minimum similarity ratio (default: 0.6)
         
     Returns:
@@ -149,6 +157,10 @@ def find_similar_question(db, question: str, threshold: float = 0.6):
     best_similarity = threshold
     
     for q in all_questions:
+        # If entity is provided, only check questions with matching entity
+        if entity and q.entity != entity:
+            continue
+            
         similarity = similar(question, q.question)
         if similarity > best_similarity:
             best_similarity = similarity
@@ -192,13 +204,13 @@ async def add_questionnaire(question: str = Form(...), answer_key: str = Form(..
     """
     db = SessionLocal()
     try:
-        # Check for similar questions
-        similar_q = find_similar_question(db, question)
+        # Check for similar questions (only within same entity)
+        similar_q = find_similar_question(db, question, entity)
         if similar_q:
             return JSONResponse(
                 status_code=400,
                 content={
-                    "message": "A similar question already exists in the database",
+                    "message": "A similar question already exists for this entity",
                     "similar_question": similar_q.to_dict()
                 }
             )
@@ -221,86 +233,162 @@ async def add_questionnaire(question: str = Form(...), answer_key: str = Form(..
     finally:
         db.close()
 
-@app.post("/upload-csv")
-async def upload_csv(file: list[UploadFile] = File(description="Multiple files as UploadFile")):
+async def progress_event_generator(client_id: str):
     """
-    Handle multiple CSV file uploads and import questions into the database.
+    Generator for SSE events to track upload progress for a specific client
+    """
+    if client_id not in progress_queues:
+        progress_queues[client_id] = Queue()
     
-    Args:
-        file (list[UploadFile]): List of CSV files to upload
-        
-    Returns:
-        dict: Summary of import results including success/failure counts
+    try:
+        while True:
+            try:
+                # Get progress update from queue with timeout
+                progress = await asyncio.wait_for(progress_queues[client_id].get(), timeout=1.0)
+                if progress is None:  # None is our signal to stop
+                    break
+                # Format the event data properly
+                event_data = json.dumps(progress)
+                yield f"data: {event_data}\n\n"
+            except asyncio.TimeoutError:
+                # Send keepalive comment every second
+                yield ": keepalive\n\n"
+            except Exception as e:
+                print(f"Error in progress_event_generator: {str(e)}")
+                break
+    finally:
+        # Cleanup when client disconnects
+        if client_id in progress_queues:
+            del progress_queues[client_id]
+
+@app.get("/upload-progress")
+async def upload_progress_endpoint(request: Request, client_id: str = None):
     """
+    SSE endpoint for tracking upload progress
+    """
+    if not client_id:
+        client_id = request.headers.get('x-client-id') or request.query_params.get('client_id') or str(id(request))
+    
+    return StreamingResponse(
+        progress_event_generator(client_id),
+        media_type="text/event-stream",
+        headers={
+            'Cache-Control': 'no-cache',
+            'Connection': 'keep-alive',
+            'X-Accel-Buffering': 'no'
+        }
+    )
+
+async def send_progress_update(client_id: str, current: int, total: int, phase: str, processed_result=None):
+    """Send a progress update to the client."""
+    if client_id in progress_queues:
+        data = {
+            "current_entry": current,
+            "total_entries": total,
+            "phase": phase,
+            "processed_result": processed_result
+        }
+        await progress_queues[client_id].put(data)
+
+@app.post("/upload-csv")
+async def upload_csv(
+    background_tasks: BackgroundTasks,
+    file: list[UploadFile] = File(description="Multiple files as UploadFile"),
+    request: Request = None
+):
+    """
+    Upload and process CSV files containing questions and answers.
+    Tracks progress of processing each entry.
+    """
+    client_id = request.headers.get('x-client-id') or str(id(request))
+    if client_id not in progress_queues:
+        progress_queues[client_id] = Queue()
+    
     if not file:
         return JSONResponse(
             status_code=400,
-            content={"message": "No files were uploaded"}
-        )
-    
-    if not all(f.filename.endswith('.csv') for f in file):
-        return JSONResponse(
-            status_code=400,
-            content={"message": "Only CSV files are allowed"}
+            content={"message": "No file uploaded"}
         )
     
     total_imported = 0
     total_duplicates = 0
     results = []
     
-    for f in file:
+    for uploaded_file in file:
+        if not uploaded_file.filename.endswith('.csv'):
+            return JSONResponse(
+                status_code=400,
+                content={"message": f"File {uploaded_file.filename} is not a CSV file"}
+            )
+        
         try:
-            # Read and decode file content with multiple encodings
-            content = await f.read()
-            encodings = ['utf-8', 'utf-8-sig', 'latin1', 'cp1252']
+            content = await uploaded_file.read()
             content_str = None
             
-            for encoding in encodings:
+            # Try different encodings
+            for encoding in ['utf-8-sig', 'utf-8', 'latin1']:
                 try:
                     content_str = content.decode(encoding)
                     break
                 except UnicodeDecodeError:
                     continue
             
-            if content_str is None:
-                results.append({
-                    "file": f.filename,
-                    "status": "error",
-                    "message": "Could not decode the CSV file. Please ensure it's a valid CSV file."
-                })
-                continue
+            if not content_str:
+                return JSONResponse(
+                    status_code=400,
+                    content={"message": f"Could not decode file {uploaded_file.filename}"}
+                )
             
-            # Clean up line endings
-            content_str = content_str.replace('\r\n', '\n').replace('\r', '\n')
-            
-            # Process CSV content
+            # Parse CSV
             csv_file = io.StringIO(content_str)
             reader = csv.DictReader(csv_file)
             
-            # Normalize column names and remove BOM
-            fieldnames = [name.strip().lower().replace('\ufeff', '') for name in reader.fieldnames] if reader.fieldnames else []
+            # Get field mapping
+            headers = reader.fieldnames
+            if not headers:
+                return JSONResponse(
+                    status_code=400,
+                    content={"message": "CSV file has no headers"}
+                )
             
-            # Create a mapping of normalized field names to original field names
             field_mapping = {}
-            for original_name in reader.fieldnames:
-                normalized_name = original_name.strip().lower().replace('\ufeff', '')
-                field_mapping[normalized_name] = original_name
+            for header in headers:
+                header_lower = header.lower()
+                if 'question' in header_lower:
+                    field_mapping['question'] = header
+                elif any(key in header_lower for key in ['answer', 'response']):
+                    field_mapping['answer_key'] = header
+                elif 'entity' in header_lower:
+                    field_mapping['entity'] = header
+                elif 'comment' in header_lower:
+                    field_mapping['comment'] = header
             
-            # Validate required columns
-            if 'question' not in fieldnames or 'answer_key' not in fieldnames:
-                results.append({
-                    "file": f.filename,
-                    "status": "error",
-                    "message": f"CSV must contain 'question' and 'answer_key' columns. 'entity' and 'comment' are optional. Found columns: {fieldnames}"
-                })
-                continue
+            if 'question' not in field_mapping:
+                return JSONResponse(
+                    status_code=400,
+                    content={"message": "CSV must contain a question column"}
+                )
+            
+            # Count total entries
+            csv_file.seek(0)
+            total_entries = sum(1 for _ in csv.DictReader(io.StringIO(content_str)))
+            
+            # Send initial progress
+            await send_progress_update(client_id, 0, total_entries, "Preparing")
+            
+            # Reset file pointer and skip header
+            csv_file.seek(0)
+            reader = csv.DictReader(csv_file)
             
             db = SessionLocal()
             questionnaires = []
             duplicates = []
             
             try:
-                for row in reader:
+                for i, row in enumerate(reader, 1):
+                    # Update progress
+                    await send_progress_update(client_id, i, total_entries, "Reading File")
+                    
                     # Create a new dict with normalized keys
                     normalized_row = {}
                     for norm_key, orig_key in field_mapping.items():
@@ -316,7 +404,7 @@ async def upload_csv(file: list[UploadFile] = File(description="Multiple files a
                         continue
                     
                     # Check for duplicates
-                    similar_q = find_similar_question(db, question)
+                    similar_q = find_similar_question(db, question, entity)
                     if similar_q:
                         duplicates.append({
                             "question": question,
@@ -333,6 +421,9 @@ async def upload_csv(file: list[UploadFile] = File(description="Multiple files a
                     )
                     db.add(new_questionnaire)
                     questionnaires.append(new_questionnaire)
+                    
+                    # Small delay to prevent overwhelming the event stream
+                    await asyncio.sleep(0.01)
                 
                 db.commit()
                 for q in questionnaires:
@@ -340,48 +431,47 @@ async def upload_csv(file: list[UploadFile] = File(description="Multiple files a
                 
                 imported_count = len(questionnaires)
                 total_imported += imported_count
-                results.append({
-                    "file": f.filename,
-                    "status": "success",
-                    "message": f"Successfully imported {imported_count} questionnaires",
+                
+                result = {
+                    "filename": uploaded_file.filename,
+                    "imported": imported_count,
                     "duplicates": duplicates
-                })
-            except Exception as e:
-                db.rollback()
-                print(f"Error processing CSV: {str(e)}")
-                results.append({
-                    "file": f.filename,
-                    "status": "error",
-                    "message": f"Error processing CSV: {str(e)}"
-                })
+                }
+                results.append(result)
+                
             finally:
                 db.close()
+                
         except Exception as e:
-            print(f"Error reading file: {str(e)}")
-            results.append({
-                "file": f.filename,
-                "status": "error",
-                "message": f"Error reading file: {str(e)}"
-            })
+            # Signal end of progress updates
+            await send_progress_update(client_id, 0, 0, "Error")
+            return JSONResponse(
+                status_code=500,
+                content={"message": f"Error processing file {uploaded_file.filename}: {str(e)}"}
+            )
+    
+    # Signal end of progress updates
+    await send_progress_update(client_id, 0, 0, "Complete")
     
     return {
-        "message": f"Processed {len(file)} files. Total imported: {total_imported}, Total duplicates: {total_duplicates}",
+        "message": f"Successfully imported {total_imported} questions. Found {total_duplicates} duplicates.",
         "results": results
     }
 
 @app.post("/process-questionnaire")
-async def process_questionnaire(file: UploadFile = File(...), threshold: float = 0.6, entity: str = None):
+async def process_questionnaire(
+    file: UploadFile = File(...),
+    threshold: float = 0.6,
+    entity: str = None,
+    request: Request = None
+):
     """
     Process a questionnaire CSV file and find matching answers from the knowledge base.
-    
-    Args:
-        file (UploadFile): CSV file containing questions
-        threshold (float): Similarity threshold for matching questions (default: 0.6)
-        entity (str): Optional entity to filter matches by
-        
-    Returns:
-        dict: Processing results and updated CSV content
     """
+    client_id = request.headers.get('x-client-id', str(id(request)))
+    if client_id not in progress_queues:
+        progress_queues[client_id] = Queue()
+
     if not file.filename.endswith('.csv'):
         return JSONResponse(
             status_code=400,
@@ -389,7 +479,10 @@ async def process_questionnaire(file: UploadFile = File(...), threshold: float =
         )
     
     try:
-        # Read the file content
+        # Initial progress update
+        await send_progress_update(client_id, 0, 0, "Preparing")
+        
+        # Read and process the file
         content = await file.read()
         
         # Try different encodings
@@ -407,11 +500,10 @@ async def process_questionnaire(file: UploadFile = File(...), threshold: float =
                 content={"message": "Could not decode the CSV file"}
             )
         
-        # Use CSV reader to properly handle line breaks and quotes
+        # Process CSV headers and setup
         csv_file = io.StringIO(content_str)
-        reader = csv.reader(csv_file, quotechar='"', delimiter=',', quoting=csv.QUOTE_MINIMAL, skipinitialspace=True)
+        reader = csv.reader(csv_file)
         
-        # Get headers
         try:
             headers = next(reader)
             headers = [h.strip() for h in headers]
@@ -421,71 +513,61 @@ async def process_questionnaire(file: UploadFile = File(...), threshold: float =
                 content={"message": "CSV file is empty"}
             )
         
-        if not headers:
-            return JSONResponse(
-                status_code=400,
-                content={"message": "CSV file has no headers"}
-            )
-        
-        # Find required columns
-        question_idx = None
-        answer_idx = None
-        comment_idx = None
-        
-        for i, header in enumerate(headers):
-            header_lower = header.lower()
-            if 'question' in header_lower:
-                question_idx = i
-            elif 'answer' in header_lower:
-                answer_idx = i
-            elif 'comment' in header_lower:
-                comment_idx = i
+        # Find column indices
+        question_idx = next((i for i, h in enumerate(headers) if 'question' in h.lower()), None)
+        answer_idx = next((i for i, h in enumerate(headers) if 'answer' in h.lower()), None)
+        comment_idx = next((i for i, h in enumerate(headers) if 'comment' in h.lower()), None)
         
         if question_idx is None:
             return JSONResponse(
                 status_code=400,
-                content={"message": "CSV must contain a 'question' column"}
+                content={"message": "CSV must contain a question column"}
             )
         
-        # Ensure we have all necessary columns in headers
+        # Add missing columns if needed
         if answer_idx is None:
             headers.append('answer')
             answer_idx = len(headers) - 1
-        
         if comment_idx is None:
             headers.append('comment')
             comment_idx = len(headers) - 1
         
-        # Process rows
+        # Count total questions first
+        csv_file.seek(0)
+        next(reader)  # Skip header
+        total_questions = sum(1 for row in reader if row and row[question_idx].strip())
+        
+        # Send initial count
+        await send_progress_update(client_id, 0, total_questions, "Reading Questions")
+        
+        # Read all questions
         questions = []
         rows = []
+        csv_file.seek(0)
+        next(reader)  # Skip header
+        current_question = 0
         
-        for values in reader:
-            # Ensure we have enough values for all columns
-            while len(values) < len(headers):
-                values.append('')
+        # First phase: Read all questions
+        for row in reader:
+            if not row:  # Skip empty rows
+                continue
             
-            # Create a dict for this row
-            row_dict = {}
-            for i, header in enumerate(headers):
-                if i < len(values):
-                    row_dict[header] = values[i]
-                else:
-                    row_dict[header] = ''
+            # Ensure row has enough columns
+            row.extend([''] * (len(headers) - len(row)))
             
-            rows.append(row_dict)
-            
-            # Get values for this row
-            question = values[question_idx] if question_idx < len(values) else ''
-            answer = values[answer_idx] if answer_idx < len(values) else ''
-            comment = values[comment_idx] if comment_idx < len(values) else ''
-            
+            question = row[question_idx].strip()
             if question:
+                current_question += 1
                 questions.append({
                     'question': question,
-                    'answer': answer,
-                    'comment': comment
+                    'answer': row[answer_idx].strip() if answer_idx < len(row) else '',
+                    'comment': row[comment_idx].strip() if comment_idx < len(row) else ''
                 })
+                rows.append(row)
+                
+                # Send progress update for reading phase
+                await send_progress_update(client_id, current_question, total_questions, "Reading Questions")
+                await asyncio.sleep(0.01)  # Small delay to prevent overwhelming
         
         if not questions:
             return JSONResponse(
@@ -493,77 +575,86 @@ async def process_questionnaire(file: UploadFile = File(...), threshold: float =
                 content={"message": "No questions found in the CSV file"}
             )
         
-        # Find matches in database using AI processor
-        db = SessionLocal()
-        try:
-            results = []
-            
-            for q in questions:
-                # First check if there's an existing answer
+        # Second phase: Process questions with AI
+        results = []
+        
+        for i, q in enumerate(questions, 1):
+            try:
+                # Send progress update before processing each question
+                await send_progress_update(client_id, i, total_questions, "AI Processing")
+                
+                # Process the question
                 if q['answer']:
                     best_match = {
                         "question": q['question'],
                         "answer_key": q['answer'],
-                        "comment": q['comment'] if q['comment'] else None,
+                        "comment": q['comment'],
                         "similarity": 1.0,
                         "is_ai_generated": False
                     }
                 else:
-                    # Use AI processor to find matches and generate answer
                     ai_result = ai_processor.process_question(q['question'])
-                    print(f"AI Result for question '{q['question']}': {ai_result}")  # Debug print
-                    
                     if ai_result.get('answer') and ai_result.get('answer') != "No similar questions found in the knowledge base.":
                         best_match = {
                             "question": q['question'],
                             "answer_key": ai_result['answer'],
                             "comment": f"Confidence: {ai_result['confidence']:.2%}",
                             "similarity": ai_result['confidence'],
-                            "similar_questions": ai_result.get('similar_questions', []),
-                            "is_ai_generated": ai_result.get('is_ai_generated', True)
+                            "is_ai_generated": True
                         }
                     else:
                         best_match = None
-                        print(f"No valid answer found for question: {q['question']}")  # Debug print
-                
-                results.append({
+
+                result = {
                     "input_question": q['question'],
                     "best_match": best_match
-                })
+                }
+                results.append(result)
                 
-                # Update the row with the match
-                for row in rows:
-                    if row[headers[question_idx]] == q['question']:
-                        if best_match:
-                            if answer_idx is not None:
-                                row[headers[answer_idx]] = best_match['answer_key']
-                            if comment_idx is not None:
-                                row[headers[comment_idx]] = best_match['comment']
-                        break
-            
-            # Create output CSV content using csv writer to properly handle special characters
-            output = io.StringIO()
-            writer = csv.writer(output, quotechar='"', delimiter=',', quoting=csv.QUOTE_MINIMAL)
-            
-            # Write headers
-            writer.writerow(headers)
-            
-            # Write rows
-            for row in rows:
-                values = [str(row.get(h, '')) for h in headers]
-                writer.writerow(values)
-            
-            csv_content = output.getvalue()
-            
-            return {
-                "results": results,
-                "csv_content": csv_content,
-                "filename": f"processed_{file.filename}"
-            }
-        finally:
-            db.close()
-            
+                # Send the individual result after processing
+                await send_progress_update(
+                    client_id, 
+                    i, 
+                    total_questions, 
+                    "AI Processing",
+                    processed_result=result
+                )
+                
+                # Small delay to prevent overwhelming the event stream
+                await asyncio.sleep(0.01)
+            except Exception as e:
+                print(f"Error processing question {i}: {str(e)}")
+                # Continue processing other questions even if one fails
+                continue
+        
+        # Send progress update for output generation phase
+        await send_progress_update(client_id, total_questions, total_questions, "Generating Output")
+        
+        # Create output CSV
+        output = io.StringIO()
+        writer = csv.writer(output)
+        writer.writerow(headers)
+        writer.writerows(rows)
+        
+        # Send completion progress update
+        await send_progress_update(client_id, total_questions, total_questions, "Complete")
+        
+        # Signal end of progress updates
+        if client_id in progress_queues:
+            await progress_queues[client_id].put(None)
+            del progress_queues[client_id]  # Clean up the queue
+        
+        return {
+            "results": results,
+            "csv_content": output.getvalue(),
+            "filename": f"processed_{file.filename}"
+        }
+        
     except Exception as e:
+        # Signal end of progress updates on error
+        if client_id in progress_queues:
+            await progress_queues[client_id].put(None)
+            del progress_queues[client_id]  # Clean up the queue
         print(f"Error processing questionnaire: {str(e)}")
         return JSONResponse(
             status_code=500,
@@ -657,6 +748,40 @@ async def generate_answer(request: Request):
             status_code=500,
             content={"error": str(e)}
         )
+
+@app.get("/questionnaire-progress")
+async def questionnaire_progress(request: Request, client_id: str):
+    """
+    Server-Sent Events endpoint for progress updates.
+    """
+    if client_id not in progress_queues:
+        progress_queues[client_id] = Queue()
+
+    async def event_generator():
+        try:
+            while True:
+                if client_id in progress_queues:
+                    data = await progress_queues[client_id].get()
+                    if data is None:  # End of processing signal
+                        break
+                    yield f"data: {json.dumps(data)}\n\n"
+                else:
+                    break
+        except asyncio.CancelledError:
+            pass
+        finally:
+            if client_id in progress_queues:
+                del progress_queues[client_id]
+
+    return StreamingResponse(
+        event_generator(),
+        media_type="text/event-stream",
+        headers={
+            "Cache-Control": "no-cache",
+            "Connection": "keep-alive",
+            "Access-Control-Allow-Origin": "*",
+        }
+    )
 
 if __name__ == "__main__":
     import uvicorn

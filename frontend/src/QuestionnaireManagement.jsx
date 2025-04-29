@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react'
-import { Container, Title, Paper, Stack, Text, Button, FileInput, Select, Group, Box, Badge, Alert, Progress, Tooltip } from '@mantine/core'
+import { Container, Title, Paper, Stack, Text, Button, FileInput, Select, Group, Box, Badge, Alert, Progress, Tooltip, Textarea } from '@mantine/core'
 import { IconUpload, IconInfoCircle } from '@tabler/icons-react'
 
 function QuestionnaireManagement() {
@@ -15,6 +15,8 @@ function QuestionnaireManagement() {
     total: 0,
     phase: 'Preparing'
   })
+  const [editedAnswers, setEditedAnswers] = useState({})
+  const [acceptedAnswers, setAcceptedAnswers] = useState({})
 
   // Debug logging function
   const logDebug = (type, message, data = null) => {
@@ -117,7 +119,43 @@ function QuestionnaireManagement() {
         // Move CSV download to after user has reviewed results
         if (data.csv_content) {
           const downloadCsv = () => {
-            const blob = new Blob([data.csv_content], { type: 'text/csv' })
+            // Get the current state of answers including accepted edits
+            const processedResults = data.results.map((result, index) => {
+              const hasLowConfidence = result.best_match && result.best_match.similarity < 0.5;
+              let answer = '';
+              
+              if (result.best_match) {
+                if (hasLowConfidence && acceptedAnswers[index] && editedAnswers[index]) {
+                  // Use accepted edited answer for low confidence matches
+                  answer = editedAnswers[index];
+                } else {
+                  // Use original answer for high confidence or unedited matches
+                  answer = result.best_match.answer_key;
+                }
+              }
+
+              return {
+                question: result.input_question,
+                answer: answer,
+                confidence: result.best_match ? Math.round(result.best_match.similarity * 100) + '%' : '0%'
+              };
+            });
+
+            // Convert to CSV format
+            const headers = ['Question', 'Answer', 'Confidence'];
+            const csvRows = [
+              headers.join(','),
+              ...processedResults.map(row => 
+                [
+                  `"${row.question.replace(/"/g, '""')}"`,
+                  `"${row.answer.replace(/"/g, '""')}"`,
+                  row.confidence
+                ].join(',')
+              )
+            ];
+            const csvContent = csvRows.join('\n');
+
+            const blob = new Blob([csvContent], { type: 'text/csv' })
             const url = window.URL.createObjectURL(blob)
             const a = document.createElement('a')
             a.href = url
@@ -143,6 +181,33 @@ function QuestionnaireManagement() {
       setIsProcessing(false)
     }
   }
+
+  // Add handler for answer changes
+  const handleAnswerChange = (index, value) => {
+    setEditedAnswers(prev => ({
+      ...prev,
+      [index]: value
+    }));
+    // Clear accepted state when answer is edited
+    setAcceptedAnswers(prev => ({
+      ...prev,
+      [index]: false
+    }));
+  };
+
+  const handleAcceptAnswer = (index) => {
+    setAcceptedAnswers(prev => ({
+      ...prev,
+      [index]: true
+    }));
+  };
+
+  const handleEditAcceptedAnswer = (index) => {
+    setAcceptedAnswers(prev => ({
+      ...prev,
+      [index]: false
+    }));
+  };
 
   return (
     <Container size="lg">
@@ -277,10 +342,49 @@ function QuestionnaireManagement() {
                           <Text component="span" fw={700} c={result.best_match.similarity < 0.5 ? 'dark' : undefined}>Question: </Text>
                           {result.best_match.question}
                         </Text>
-                        <Text size="sm" c={result.best_match.similarity < 0.5 ? 'dark' : undefined}>
-                          <Text component="span" fw={700} c={result.best_match.similarity < 0.5 ? 'dark' : undefined}>Answer: </Text>
-                          {result.best_match.answer_key}
-                        </Text>
+                        {result.best_match.similarity < 0.5 ? (
+                          <Stack spacing="xs">
+                            <Text component="span" fw={700} c="dark">Answer: </Text>
+                            <Group align="flex-start" spacing="sm">
+                              <Textarea
+                                value={editedAnswers[index] || result.best_match.answer_key}
+                                onChange={(e) => handleAnswerChange(index, e.target.value)}
+                                minRows={2}
+                                disabled={acceptedAnswers[index]}
+                                style={{ flex: 1 }}
+                                styles={{
+                                  input: {
+                                    backgroundColor: 'white',
+                                    color: 'dark',
+                                  }
+                                }}
+                              />
+                              {acceptedAnswers[index] ? (
+                                <Button
+                                  size="sm"
+                                  color="yellow"
+                                  onClick={() => handleEditAcceptedAnswer(index)}
+                                >
+                                  Edit
+                                </Button>
+                              ) : (
+                                <Button
+                                  size="sm"
+                                  color={acceptedAnswers[index] ? "green" : "blue"}
+                                  onClick={() => handleAcceptAnswer(index)}
+                                  disabled={acceptedAnswers[index] || !editedAnswers[index]}
+                                >
+                                  Accept
+                                </Button>
+                              )}
+                            </Group>
+                          </Stack>
+                        ) : (
+                          <Text size="sm" c={result.best_match.similarity < 0.5 ? 'dark' : undefined}>
+                            <Text component="span" fw={700} c={result.best_match.similarity < 0.5 ? 'dark' : undefined}>Answer: </Text>
+                            {result.best_match.answer_key}
+                          </Text>
+                        )}
                         {result.best_match.comment && (
                           <Text 
                             size="sm" 

@@ -82,7 +82,8 @@ function KnowledgeBaseUpload() {
       if (data.results) {
         setUploadStatus({
           type: 'success',
-          message: `Successfully added ${data.results.length} Q&A pairs to the knowledge base`
+          message: data.message,
+          results: data.results
         })
         setSelectedFile(null)
       }
@@ -180,11 +181,6 @@ function KnowledgeBaseUpload() {
                 >
                   <Stack spacing={8}>
                     <Text>{uploadStatus.message}</Text>
-                    {uploadStatus.type === 'success' && uploadStatus.results && (
-                      <Text size="sm" c={uploadStatus.type === 'success' ? 'white' : 'dimmed'}>
-                        Successfully processed {uploadStatus.results.length} entries
-                      </Text>
-                    )}
                   </Stack>
                 </Alert>
               )}

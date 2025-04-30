@@ -118,7 +118,7 @@ class ProcessedQuestionnaire(Base):
     def to_dict(self):
         """Convert the processed questionnaire entry to a dictionary."""
         low_confidence_answers = json.loads(self.low_confidence_answers) if self.low_confidence_answers else []
-        # Count only answers that have confidence < 50% and haven't been accepted
+        # Count answers that have confidence < 50% and haven't been accepted
         unaccepted_low_conf_count = len([
             answer for answer in low_confidence_answers 
             if answer['confidence'] < 0.5 and not answer.get('accepted', False)
@@ -131,7 +131,7 @@ class ProcessedQuestionnaire(Base):
             "questions_count": self.questions_count,
             "processed_count": self.processed_count,
             "success_rate": self.success_rate,
-            "unaccepted_answers_count": unaccepted_low_conf_count,  # Updated to use the new calculation
+            "unaccepted_answers_count": unaccepted_low_conf_count,
             "entity": self.entity,
             "error_message": self.error_message,
             "created_at": self.created_at.isoformat() if self.created_at else None,
@@ -720,45 +720,40 @@ async def process_questionnaire(
             db.add(backlog_entry)
             db.commit()
             db.refresh(backlog_entry)
-        except Exception as e:
-            db.rollback()
-            print(f"Error creating backlog entry: {str(e)}")
-        finally:
-            db.close()
 
-        # Update backlog entry with results
-        db = SessionLocal()
-        try:
+            # Update backlog entry with results
             backlog_entry = db.query(ProcessedQuestionnaire).filter(ProcessedQuestionnaire.id == backlog_entry.id).first()
             if backlog_entry:
-                # Track low confidence answers (answers with < 50% confidence)
+                # Track all low confidence answers
                 low_confidence_answers = []
                 for i, result in enumerate(results):
                     if result.get('best_match'):
                         confidence = result['best_match'].get('similarity', 0)
-                        if confidence < 0.5:  # Only track answers with less than 50% confidence
+                        if confidence < 0.5:  # Track all answers with less than 50% confidence
                             low_confidence_answers.append({
                                 'index': i,
                                 'question': result['input_question'],
                                 'answer': result['best_match']['answer_key'],
                                 'confidence': confidence,
-                                'accepted': False,  # Default to not accepted
-                                'edited_answer': None
+                                'accepted': False,
+                                'edited_answer': None,
+                                'is_ai_generated': result['best_match'].get('is_ai_generated', False)
                             })
 
                 backlog_entry.status = "completed"
                 backlog_entry.questions_count = len(questions)
                 backlog_entry.processed_count = len(results)
                 backlog_entry.success_rate = int((len([r for r in results if r.get('best_match')]) / len(questions)) * 100)
-                backlog_entry.unaccepted_answers_count = len(low_confidence_answers)  # Initial count of low confidence answers
+                backlog_entry.unaccepted_answers_count = len(low_confidence_answers)
                 backlog_entry.can_download = True
                 backlog_entry.csv_content = output.getvalue()
                 backlog_entry.low_confidence_answers = json.dumps(low_confidence_answers)
                 backlog_entry.edited_answers = json.dumps({})
                 db.commit()
+
         except Exception as e:
             db.rollback()
-            print(f"Error updating backlog entry: {str(e)}")
+            print(f"Error creating backlog entry: {str(e)}")
         finally:
             db.close()
 
@@ -1381,7 +1376,6 @@ async def mark_questionnaire_downloaded(entry_id: int):
     finally:
         db.close()
 
-# Add new endpoint for updating edited answers
 @app.post("/questionnaire-backlog/{entry_id}/update-answers")
 async def update_questionnaire_answers(entry_id: int, request: Request):
     """
@@ -1407,16 +1401,29 @@ async def update_questionnaire_answers(entry_id: int, request: Request):
         
         # Update low confidence answers with acceptance status
         low_confidence_answers = json.loads(entry.low_confidence_answers) if entry.low_confidence_answers else []
+        
+        # Update acceptance status and edited answers
         for answer in low_confidence_answers:
             answer_index = answer['index']
-            if answer_index in accepted_answers:
-                answer['accepted'] = True
-            if str(answer_index) in edited_answers:
-                answer['edited_answer'] = edited_answers[str(answer_index)]
+            # Update any answer with confidence < 50%
+            if answer['confidence'] < 0.5:
+                if answer_index in accepted_answers:
+                    answer['accepted'] = True
+                else:
+                    answer['accepted'] = False
+                
+                if str(answer_index) in edited_answers:
+                    answer['edited_answer'] = edited_answers[str(answer_index)]
+        
+        # Count unaccepted low confidence answers
+        unaccepted_count = len([
+            answer for answer in low_confidence_answers 
+            if answer['confidence'] < 0.5 and not answer.get('accepted', False)
+        ])
         
         entry.low_confidence_answers = json.dumps(low_confidence_answers)
         entry.edited_answers = json.dumps(edited_answers)
-        entry.unaccepted_answers_count = len([a for a in low_confidence_answers if not a['accepted']])
+        entry.unaccepted_answers_count = unaccepted_count
         
         # Update CSV content with edited answers
         if entry.csv_content:
@@ -1450,6 +1457,36 @@ async def update_questionnaire_answers(entry_id: int, request: Request):
         )
     finally:
         db.close()
+
+@app.delete("/questionnaire-backlog/clear")
+async def clear_questionnaire_backlog():
+    """
+    Clear all entries from the questionnaire backlog.
+    This does not affect the knowledge base Q&A entries.
+    
+    Returns:
+        dict: Success message or error
+    """
+    try:
+        db = SessionLocal()
+        try:
+            # Delete all entries from the processed_questionnaires table
+            db.query(ProcessedQuestionnaire).delete()
+            db.commit()
+            return {"message": "Successfully cleared questionnaire backlog"}
+        except Exception as e:
+            db.rollback()
+            return JSONResponse(
+                status_code=500,
+                content={"message": f"Error clearing questionnaire backlog: {str(e)}"}
+            )
+        finally:
+            db.close()
+    except Exception as e:
+        return JSONResponse(
+            status_code=500,
+            content={"message": f"Database connection error: {str(e)}"}
+        )
 
 if __name__ == "__main__":
     import uvicorn

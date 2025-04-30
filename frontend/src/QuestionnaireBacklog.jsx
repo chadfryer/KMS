@@ -229,14 +229,12 @@ function QuestionnaireBacklog() {
                       <Text size="lg" fw={500}>{entry.success_rate}%</Text>
                     </Stack>
                     <Stack spacing={2}>
-                      <Text size="sm" c="dimmed">Low Confidence Answers</Text>
+                      <Text size="sm" c="dimmed">Questions in Review</Text>
                       <Group spacing={4} align="baseline">
                         <Text size="lg" fw={500} c={entry.unaccepted_answers_count > 0 ? "red" : undefined}>
                           {entry.unaccepted_answers_count}
                         </Text>
-                        <Text size="xs" c="dimmed">unaccepted</Text>
                       </Group>
-                      <Text size="xs" c="dimmed">(&lt;50% confidence)</Text>
                     </Stack>
                     {entry.entity && (
                       <Stack spacing={2}>
@@ -261,15 +259,17 @@ function QuestionnaireBacklog() {
         onClose={() => setEditModalOpen(false)}
         title={
           <Group>
-            <Text size="lg" fw={500}>Edit Low Confidence Answers</Text>
-            <Text size="sm" c="dimmed">(&lt;50% confidence)</Text>
+            <Text size="lg" fw={500}>Edit Questions in Review</Text>
+            <Text size="sm" c="dimmed">(below 50% confidence)</Text>
           </Group>
         }
         size="xl"
       >
         {selectedEntry && (
           <Stack spacing="md">
-            {selectedEntry.low_confidence_answers.map((answer, idx) => (
+            {selectedEntry.low_confidence_answers
+              .filter(answer => answer.confidence < 0.5)
+              .map((answer, idx) => (
               <Paper key={idx} p="md" withBorder>
                 <Stack spacing="xs">
                   <Group position="apart">

@@ -145,9 +145,6 @@ function DatabaseView({ onBack }) {
             <Title order={1} size={32}>Knowledge Base</Title>
             <Text c="dimmed" size="lg">View and search through your knowledge base entries</Text>
           </Stack>
-          <Badge size="lg" variant="light" color="red" styles={{ root: { backgroundColor: '#CC0000', color: '#FFFFFF' } }}>
-            {questions.length} Questions
-          </Badge>
         </Group>
 
         <Paper p={40} radius="lg" withBorder mb={40}>
@@ -240,11 +237,9 @@ function DatabaseView({ onBack }) {
         ) : (
           <Paper p={40} radius="lg" withBorder>
             <Stack spacing={40}>
-              <Group position="apart">
-                <Text size="sm" c="dimmed">
-                  Showing {paginatedQuestions.length} of {sortedQuestions.length} questions
-                </Text>
-                <Group>
+              <Group position="apart" style={{ width: '100%', justifyContent: 'space-between' }}>
+                <Title order={2} size={24}>Knowledge Base</Title>
+                <Group spacing="xs" style={{ marginLeft: 'auto' }}>
                   <Button 
                     variant="subtle"
                     size="md"
@@ -294,6 +289,9 @@ function DatabaseView({ onBack }) {
                   </Button>
                 </Group>
               </Group>
+              <Text size="sm" c="dimmed">
+                Showing {paginatedQuestions.length} of {sortedQuestions.length} questions
+              </Text>
 
               {paginatedQuestions.map((question, index) => (
                 <Paper

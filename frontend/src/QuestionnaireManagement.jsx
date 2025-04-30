@@ -226,7 +226,7 @@ function QuestionnaireManagement() {
           The system will attempt to match each question with the most relevant answer from the knowledge base.
         </Text>
 
-        <Paper shadow="xs" p="md">
+        <Paper p={40} radius="lg" withBorder>
           <Stack spacing="md">
             <Group position="apart">
               <Title order={2} size={28}>Upload Customer Questionnaire</Title>
@@ -266,7 +266,7 @@ function QuestionnaireManagement() {
             </Stack>
 
             {isProcessing && (
-              <Paper p="md" withBorder>
+              <Paper p={40} radius="lg" withBorder>
                 <Stack spacing="sm">
                   <Group position="apart">
                     <Text size="sm">Uploading {questionnaireFile?.name}</Text>
@@ -305,7 +305,7 @@ function QuestionnaireManagement() {
         </Paper>
 
         {processingResults && processingResults.length > 0 && (
-          <Paper shadow="xs" p="md" pos="relative" mt="xl">
+          <Paper p={40} radius="lg" withBorder pos="relative" mt="xl">
             <Button 
               onClick={downloadCsv}
               variant="light"

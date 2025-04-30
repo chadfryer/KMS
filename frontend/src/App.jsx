@@ -17,6 +17,7 @@ import KnowledgeBaseUpload from './KnowledgeBaseUpload.jsx'
 import QuestionnaireManagement from './QuestionnaireManagement.jsx'
 import MetricsView from './MetricsView.jsx'
 import MainView from './MainView.jsx'
+import QuestionnaireBacklog from './QuestionnaireBacklog.jsx'
 import headerImage from './assets/header-image.png'
 import './App.css'
 
@@ -146,12 +147,7 @@ function AppContent() {
           <Route path="/knowledge-base-upload" element={<KnowledgeBaseUpload />} />
           <Route path="/questionnaire-management" element={<QuestionnaireManagement />} />
           <Route path="/metrics" element={<MetricsView />} />
-          <Route path="/backlog" element={
-            <Container size="xl" py={40}>
-              <Title order={1}>Questionnaire Backlog</Title>
-              <Text c="dimmed">Coming soon...</Text>
-            </Container>
-          } />
+          <Route path="/backlog" element={<QuestionnaireBacklog />} />
           <Route path="*" element={<MainView onViewDatabase={() => navigate('/knowledge-base')} />} />
         </Routes>
       </AppShell.Main>

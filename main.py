@@ -13,7 +13,7 @@ from fastapi.templating import Jinja2Templates
 from fastapi.staticfiles import StaticFiles
 from fastapi.responses import RedirectResponse, JSONResponse, StreamingResponse
 from fastapi.middleware.cors import CORSMiddleware
-from sqlalchemy import create_engine, Column, Integer, String, Text, func, DateTime, desc
+from sqlalchemy import create_engine, Column, Integer, String, Text, func, DateTime, desc, Boolean
 from sqlalchemy.ext.declarative import declarative_base
 from sqlalchemy.orm import sessionmaker
 import os
@@ -74,6 +74,71 @@ class Questionnaire(Base):
             "entity": self.entity,
             "comment": self.comment,
             "created_at": self.created_at.isoformat() if self.created_at else None
+        }
+
+class ProcessedQuestionnaire(Base):
+    """
+    SQLAlchemy model representing a processed questionnaire entry in the backlog.
+    
+    Attributes:
+        id (int): Primary key
+        filename (str): Original filename of the questionnaire
+        status (str): Status of processing (processing, completed, failed)
+        questions_count (int): Total number of questions in the file
+        processed_count (int): Number of questions processed
+        success_rate (float): Percentage of questions successfully processed
+        unaccepted_answers_count (int): Number of answers that need review
+        entity (str): The entity the questionnaire was processed against
+        error_message (str): Error message if processing failed
+        created_at (datetime): When the questionnaire was uploaded
+        downloaded (bool): Whether the processed file has been downloaded
+        can_download (bool): Whether the file is ready for download
+        csv_content (str): The processed CSV file content
+        low_confidence_answers (Text): JSON string containing low confidence answers and their status
+        edited_answers (Text): JSON string containing edited answers before download
+    """
+    __tablename__ = "processed_questionnaires"
+
+    id = Column(Integer, primary_key=True, index=True)
+    filename = Column(String, nullable=False)
+    status = Column(String, nullable=False)
+    questions_count = Column(Integer, default=0)
+    processed_count = Column(Integer, default=0)
+    success_rate = Column(Integer, default=0)
+    unaccepted_answers_count = Column(Integer, default=0)
+    entity = Column(String, nullable=True)
+    error_message = Column(Text, nullable=True)
+    created_at = Column(DateTime, default=datetime.utcnow)
+    downloaded = Column(Boolean, default=False)
+    can_download = Column(Boolean, default=False)
+    csv_content = Column(Text, nullable=True)
+    low_confidence_answers = Column(Text, nullable=True)  # JSON string
+    edited_answers = Column(Text, nullable=True)  # JSON string
+
+    def to_dict(self):
+        """Convert the processed questionnaire entry to a dictionary."""
+        low_confidence_answers = json.loads(self.low_confidence_answers) if self.low_confidence_answers else []
+        # Count only answers that have confidence < 50% and haven't been accepted
+        unaccepted_low_conf_count = len([
+            answer for answer in low_confidence_answers 
+            if answer['confidence'] < 0.5 and not answer.get('accepted', False)
+        ])
+        
+        return {
+            "id": self.id,
+            "filename": self.filename,
+            "status": self.status,
+            "questions_count": self.questions_count,
+            "processed_count": self.processed_count,
+            "success_rate": self.success_rate,
+            "unaccepted_answers_count": unaccepted_low_conf_count,  # Updated to use the new calculation
+            "entity": self.entity,
+            "error_message": self.error_message,
+            "created_at": self.created_at.isoformat() if self.created_at else None,
+            "downloaded": self.downloaded,
+            "can_download": self.can_download,
+            "low_confidence_answers": low_confidence_answers,
+            "edited_answers": json.loads(self.edited_answers) if self.edited_answers else {}
         }
 
 def init_db():
@@ -644,6 +709,59 @@ async def process_questionnaire(
             await progress_queues[client_id].put(None)
             del progress_queues[client_id]  # Clean up the queue
         
+        # Create backlog entry
+        db = SessionLocal()
+        try:
+            backlog_entry = ProcessedQuestionnaire(
+                filename=file.filename,
+                status="processing",
+                entity=entity
+            )
+            db.add(backlog_entry)
+            db.commit()
+            db.refresh(backlog_entry)
+        except Exception as e:
+            db.rollback()
+            print(f"Error creating backlog entry: {str(e)}")
+        finally:
+            db.close()
+
+        # Update backlog entry with results
+        db = SessionLocal()
+        try:
+            backlog_entry = db.query(ProcessedQuestionnaire).filter(ProcessedQuestionnaire.id == backlog_entry.id).first()
+            if backlog_entry:
+                # Track low confidence answers (answers with < 50% confidence)
+                low_confidence_answers = []
+                for i, result in enumerate(results):
+                    if result.get('best_match'):
+                        confidence = result['best_match'].get('similarity', 0)
+                        if confidence < 0.5:  # Only track answers with less than 50% confidence
+                            low_confidence_answers.append({
+                                'index': i,
+                                'question': result['input_question'],
+                                'answer': result['best_match']['answer_key'],
+                                'confidence': confidence,
+                                'accepted': False,  # Default to not accepted
+                                'edited_answer': None
+                            })
+
+                backlog_entry.status = "completed"
+                backlog_entry.questions_count = len(questions)
+                backlog_entry.processed_count = len(results)
+                backlog_entry.success_rate = int((len([r for r in results if r.get('best_match')]) / len(questions)) * 100)
+                backlog_entry.unaccepted_answers_count = len(low_confidence_answers)  # Initial count of low confidence answers
+                backlog_entry.can_download = True
+                backlog_entry.csv_content = output.getvalue()
+                backlog_entry.low_confidence_answers = json.dumps(low_confidence_answers)
+                backlog_entry.edited_answers = json.dumps({})
+                db.commit()
+        except Exception as e:
+            db.rollback()
+            print(f"Error updating backlog entry: {str(e)}")
+        finally:
+            db.close()
+
         return {
             "results": results,
             "csv_content": output.getvalue(),
@@ -651,6 +769,20 @@ async def process_questionnaire(
         }
         
     except Exception as e:
+        # Update backlog entry with error
+        db = SessionLocal()
+        try:
+            backlog_entry = db.query(ProcessedQuestionnaire).filter(ProcessedQuestionnaire.id == backlog_entry.id).first()
+            if backlog_entry:
+                backlog_entry.status = "failed"
+                backlog_entry.error_message = str(e)
+                db.commit()
+        except Exception as update_error:
+            db.rollback()
+            print(f"Error updating backlog entry: {str(update_error)}")
+        finally:
+            db.close()
+
         # Signal end of progress updates on error
         if client_id in progress_queues:
             await progress_queues[client_id].put(None)
@@ -1141,6 +1273,180 @@ async def get_confidence_distribution():
         return JSONResponse(
             status_code=500,
             content={"message": f"Error getting confidence distribution: {str(e)}"}
+        )
+    finally:
+        db.close()
+
+@app.get("/questionnaire-backlog")
+async def get_questionnaire_backlog():
+    """
+    Get the list of processed questionnaires.
+    
+    Returns:
+        dict: List of processed questionnaire entries
+    """
+    try:
+        db = SessionLocal()
+        entries = (
+            db.query(ProcessedQuestionnaire)
+            .order_by(ProcessedQuestionnaire.created_at.desc())
+            .all()
+        )
+        return {"entries": [entry.to_dict() for entry in entries]}
+    except Exception as e:
+        print(f"Error fetching questionnaire backlog: {str(e)}")
+        return JSONResponse(
+            status_code=500,
+            content={"message": f"Error fetching questionnaire backlog: {str(e)}"}
+        )
+    finally:
+        db.close()
+
+@app.get("/questionnaire-backlog/{entry_id}/download")
+async def download_processed_questionnaire(entry_id: int):
+    """
+    Download a processed questionnaire file.
+    
+    Args:
+        entry_id (int): ID of the processed questionnaire entry
+        
+    Returns:
+        StreamingResponse: The processed CSV file
+    """
+    try:
+        db = SessionLocal()
+        entry = db.query(ProcessedQuestionnaire).filter(ProcessedQuestionnaire.id == entry_id).first()
+        
+        if not entry:
+            return JSONResponse(
+                status_code=404,
+                content={"message": "Processed questionnaire not found"}
+            )
+            
+        if not entry.can_download:
+            return JSONResponse(
+                status_code=400,
+                content={"message": "Questionnaire is not ready for download"}
+            )
+            
+        if not entry.csv_content:
+            return JSONResponse(
+                status_code=404,
+                content={"message": "CSV content not found"}
+            )
+            
+        return StreamingResponse(
+            io.StringIO(entry.csv_content),
+            media_type="text/csv",
+            headers={
+                "Content-Disposition": f"attachment; filename=processed_{entry.filename}"
+            }
+        )
+    except Exception as e:
+        print(f"Error downloading processed questionnaire: {str(e)}")
+        return JSONResponse(
+            status_code=500,
+            content={"message": f"Error downloading processed questionnaire: {str(e)}"}
+        )
+    finally:
+        db.close()
+
+@app.post("/questionnaire-backlog/{entry_id}/mark-downloaded")
+async def mark_questionnaire_downloaded(entry_id: int):
+    """
+    Mark a processed questionnaire as downloaded.
+    
+    Args:
+        entry_id (int): ID of the processed questionnaire entry
+    """
+    try:
+        db = SessionLocal()
+        entry = db.query(ProcessedQuestionnaire).filter(ProcessedQuestionnaire.id == entry_id).first()
+        
+        if not entry:
+            return JSONResponse(
+                status_code=404,
+                content={"message": "Processed questionnaire not found"}
+            )
+            
+        entry.downloaded = True
+        db.commit()
+        return {"success": True}
+    except Exception as e:
+        print(f"Error marking questionnaire as downloaded: {str(e)}")
+        return JSONResponse(
+            status_code=500,
+            content={"message": f"Error marking questionnaire as downloaded: {str(e)}"}
+        )
+    finally:
+        db.close()
+
+# Add new endpoint for updating edited answers
+@app.post("/questionnaire-backlog/{entry_id}/update-answers")
+async def update_questionnaire_answers(entry_id: int, request: Request):
+    """
+    Update edited answers for a processed questionnaire.
+    
+    Args:
+        entry_id (int): ID of the processed questionnaire entry
+        request (Request): Request containing edited answers
+    """
+    try:
+        data = await request.json()
+        edited_answers = data.get('edited_answers', {})
+        accepted_answers = data.get('accepted_answers', [])
+        
+        db = SessionLocal()
+        entry = db.query(ProcessedQuestionnaire).filter(ProcessedQuestionnaire.id == entry_id).first()
+        
+        if not entry:
+            return JSONResponse(
+                status_code=404,
+                content={"message": "Processed questionnaire not found"}
+            )
+        
+        # Update low confidence answers with acceptance status
+        low_confidence_answers = json.loads(entry.low_confidence_answers) if entry.low_confidence_answers else []
+        for answer in low_confidence_answers:
+            answer_index = answer['index']
+            if answer_index in accepted_answers:
+                answer['accepted'] = True
+            if str(answer_index) in edited_answers:
+                answer['edited_answer'] = edited_answers[str(answer_index)]
+        
+        entry.low_confidence_answers = json.dumps(low_confidence_answers)
+        entry.edited_answers = json.dumps(edited_answers)
+        entry.unaccepted_answers_count = len([a for a in low_confidence_answers if not a['accepted']])
+        
+        # Update CSV content with edited answers
+        if entry.csv_content:
+            csv_data = list(csv.reader(io.StringIO(entry.csv_content)))
+            headers = csv_data[0]
+            
+            # Find answer column index
+            answer_idx = next((i for i, h in enumerate(headers) if 'answer' in h.lower()), None)
+            if answer_idx is not None:
+                for answer_index, new_answer in edited_answers.items():
+                    try:
+                        row_idx = int(answer_index) + 1  # +1 to skip header row
+                        if row_idx < len(csv_data):
+                            csv_data[row_idx][answer_idx] = new_answer
+                    except (ValueError, IndexError):
+                        continue
+            
+            # Write updated CSV content
+            output = io.StringIO()
+            writer = csv.writer(output)
+            writer.writerows(csv_data)
+            entry.csv_content = output.getvalue()
+        
+        db.commit()
+        return entry.to_dict()
+    except Exception as e:
+        print(f"Error updating questionnaire answers: {str(e)}")
+        return JSONResponse(
+            status_code=500,
+            content={"message": f"Error updating questionnaire answers: {str(e)}"}
         )
     finally:
         db.close()

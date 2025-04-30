@@ -3,9 +3,10 @@
     "composite": true,
     "skipLibCheck": true,
     "module": "ESNext",
-    "moduleResolution": "node",
+    "moduleResolution": "bundler",
     "allowSyntheticDefaultImports": true,
+    "allowJs": true,
     "jsx": "react-jsx"
   },
-  "include": ["vite.config.ts"]
-} 
+  "include": ["frontend/vite.config.ts"]
+}

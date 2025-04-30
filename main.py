@@ -13,7 +13,7 @@ from fastapi.templating import Jinja2Templates
 from fastapi.staticfiles import StaticFiles
 from fastapi.responses import RedirectResponse, JSONResponse, StreamingResponse
 from fastapi.middleware.cors import CORSMiddleware
-from sqlalchemy import create_engine, Column, Integer, String, Text, func, DateTime
+from sqlalchemy import create_engine, Column, Integer, String, Text, func, DateTime, desc
 from sqlalchemy.ext.declarative import declarative_base
 from sqlalchemy.orm import sessionmaker
 import os
@@ -22,7 +22,7 @@ import io
 import codecs
 from difflib import SequenceMatcher
 import json
-from datetime import datetime
+from datetime import datetime, timedelta
 from ai_processor import AIProcessor
 import re
 import pandas as pd
@@ -97,7 +97,7 @@ app = FastAPI()
 # Configure CORS to allow frontend access
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["http://localhost:5173", "http://localhost:5174", "http://localhost:3000", "http://localhost:3001", "http://localhost:3002", "http://localhost:3004", "http://localhost:3005", "http://localhost:3006"],  # Allow all development ports
+    allow_origins=["http://localhost:5173", "http://localhost:5174", "http://localhost:5175", "http://localhost:3000", "http://localhost:3001", "http://localhost:3002", "http://localhost:3004", "http://localhost:3005", "http://localhost:3006"],  # Allow all development ports
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
@@ -820,6 +820,327 @@ async def get_monthly_entries():
         return JSONResponse(
             status_code=500,
             content={"message": f"Error getting monthly metrics: {str(e)}"}
+        )
+    finally:
+        db.close()
+
+@app.get("/metrics/entity-distribution")
+async def get_entity_distribution():
+    """
+    Get the distribution of questions across different entities.
+    
+    Returns:
+        dict: Count of questions per entity and percentage distribution
+    """
+    try:
+        db = SessionLocal()
+        
+        # Get total count
+        total_count = db.query(func.count(Questionnaire.id)).scalar()
+        
+        # Query to get counts by entity
+        entity_counts = (
+            db.query(
+                Questionnaire.entity,
+                func.count(Questionnaire.id).label('count')
+            )
+            .group_by(Questionnaire.entity)
+            .order_by(desc('count'))
+            .all()
+        )
+        
+        # Format the results with percentages
+        results = [
+            {
+                "entity": entry.entity or "Unspecified",
+                "count": entry.count,
+                "percentage": round((entry.count / total_count) * 100, 2) if total_count > 0 else 0
+            }
+            for entry in entity_counts
+        ]
+        
+        return {"entity_distribution": results, "total_questions": total_count}
+    except Exception as e:
+        print(f"Error getting entity distribution: {str(e)}")
+        return JSONResponse(
+            status_code=500,
+            content={"message": f"Error getting entity distribution: {str(e)}"}
+        )
+    finally:
+        db.close()
+
+@app.get("/metrics/daily-trends")
+async def get_daily_trends(days: int = 30):
+    """
+    Get daily submission trends for the specified number of days.
+    
+    Args:
+        days (int): Number of past days to analyze (default: 30)
+        
+    Returns:
+        dict: Daily submission counts and trend analysis
+    """
+    try:
+        db = SessionLocal()
+        
+        # Calculate the date range
+        end_date = datetime.utcnow()
+        start_date = end_date - timedelta(days=days)
+        
+        # Query to get daily counts
+        daily_counts = (
+            db.query(
+                func.date(Questionnaire.created_at).label('date'),
+                func.count().label('count')
+            )
+            .filter(Questionnaire.created_at >= start_date)
+            .group_by(func.date(Questionnaire.created_at))
+            .order_by(func.date(Questionnaire.created_at))
+            .all()
+        )
+        
+        # Calculate statistics
+        counts = [entry.count for entry in daily_counts]
+        avg_daily = sum(counts) / len(counts) if counts else 0
+        max_daily = max(counts) if counts else 0
+        min_daily = min(counts) if counts else 0
+        
+        # Format the results
+        results = [
+            {
+                "date": entry.date.isoformat(),
+                "count": entry.count
+            }
+            for entry in daily_counts
+        ]
+        
+        return {
+            "daily_counts": results,
+            "statistics": {
+                "average_daily": round(avg_daily, 2),
+                "maximum_daily": max_daily,
+                "minimum_daily": min_daily,
+                "total_days": len(counts),
+                "total_submissions": sum(counts)
+            }
+        }
+    except Exception as e:
+        print(f"Error getting daily trends: {str(e)}")
+        return JSONResponse(
+            status_code=500,
+            content={"message": f"Error getting daily trends: {str(e)}"}
+        )
+    finally:
+        db.close()
+
+@app.get("/metrics/complexity-analysis")
+async def get_complexity_analysis():
+    """
+    Analyze question complexity based on length and provide distribution metrics.
+    
+    Returns:
+        dict: Question complexity distribution and statistics
+    """
+    try:
+        db = SessionLocal()
+        
+        # Get all questions with their lengths
+        questions = db.query(
+            Questionnaire.id,
+            Questionnaire.question,
+            func.length(Questionnaire.question).label('length')
+        ).all()
+        
+        # Calculate length statistics
+        lengths = [q.length for q in questions]
+        avg_length = sum(lengths) / len(lengths) if lengths else 0
+        
+        # Define complexity categories
+        def get_complexity(length):
+            if length < 50:
+                return "Simple"
+            elif length < 150:
+                return "Moderate"
+            else:
+                return "Complex"
+        
+        # Group questions by complexity
+        complexity_dist = {"Simple": 0, "Moderate": 0, "Complex": 0}
+        for q in questions:
+            complexity_dist[get_complexity(q.length)] += 1
+        
+        # Calculate percentages
+        total = len(questions)
+        complexity_percentages = {
+            category: round((count / total) * 100, 2) if total > 0 else 0
+            for category, count in complexity_dist.items()
+        }
+        
+        return {
+            "complexity_distribution": {
+                "counts": complexity_dist,
+                "percentages": complexity_percentages
+            },
+            "statistics": {
+                "average_length": round(avg_length, 2),
+                "max_length": max(lengths) if lengths else 0,
+                "min_length": min(lengths) if lengths else 0,
+                "total_questions": total
+            }
+        }
+    except Exception as e:
+        print(f"Error getting complexity analysis: {str(e)}")
+        return JSONResponse(
+            status_code=500,
+            content={"message": f"Error getting complexity analysis: {str(e)}"}
+        )
+    finally:
+        db.close()
+
+@app.get("/metrics/system-summary")
+async def get_system_summary():
+    """
+    Get a comprehensive summary of the system's statistics.
+    
+    Returns:
+        dict: Overall system statistics and health metrics
+    """
+    try:
+        db = SessionLocal()
+        
+        # Get basic counts
+        total_questions = db.query(func.count(Questionnaire.id)).scalar()
+        total_entities = db.query(func.count(func.distinct(Questionnaire.entity))).scalar()
+        
+        # Get recent activity
+        last_24h = datetime.utcnow() - timedelta(hours=24)
+        last_week = datetime.utcnow() - timedelta(days=7)
+        
+        recent_counts = {
+            "last_24h": db.query(func.count(Questionnaire.id))
+                         .filter(Questionnaire.created_at >= last_24h)
+                         .scalar(),
+            "last_7d": db.query(func.count(Questionnaire.id))
+                        .filter(Questionnaire.created_at >= last_week)
+                        .scalar()
+        }
+        
+        # Get oldest and newest entries
+        oldest_entry = db.query(func.min(Questionnaire.created_at)).scalar()
+        newest_entry = db.query(func.max(Questionnaire.created_at)).scalar()
+        
+        # Calculate average entries per day
+        if oldest_entry and newest_entry:
+            days_active = (newest_entry - oldest_entry).days + 1
+            avg_per_day = total_questions / days_active if days_active > 0 else 0
+        else:
+            days_active = 0
+            avg_per_day = 0
+        
+        return {
+            "total_metrics": {
+                "total_questions": total_questions,
+                "total_entities": total_entities,
+                "days_active": days_active
+            },
+            "activity_metrics": {
+                "last_24h_submissions": recent_counts["last_24h"],
+                "last_7d_submissions": recent_counts["last_7d"],
+                "average_daily_submissions": round(avg_per_day, 2)
+            },
+            "timeline_metrics": {
+                "first_entry": oldest_entry.isoformat() if oldest_entry else None,
+                "latest_entry": newest_entry.isoformat() if newest_entry else None
+            }
+        }
+    except Exception as e:
+        print(f"Error getting system summary: {str(e)}")
+        return JSONResponse(
+            status_code=500,
+            content={"message": f"Error getting system summary: {str(e)}"}
+        )
+    finally:
+        db.close()
+
+@app.get("/metrics/confidence-distribution")
+async def get_confidence_distribution():
+    """
+    Get the distribution of confidence levels for processed questionnaire answers.
+    Groups answers into confidence bands and provides statistics.
+    
+    Returns:
+        dict: Confidence level distribution and statistics
+    """
+    try:
+        db = SessionLocal()
+        
+        # Get all questions with comments containing confidence information
+        questions = db.query(Questionnaire).filter(
+            Questionnaire.comment.like('%Confidence:%')
+        ).all()
+        
+        # Extract confidence values and categorize them
+        confidence_data = []
+        for q in questions:
+            try:
+                # Extract confidence value from comment
+                confidence_str = re.search(r'Confidence: (\d+\.?\d*)%', q.comment)
+                if confidence_str:
+                    confidence = float(confidence_str.group(1)) / 100
+                    confidence_data.append(confidence)
+            except (ValueError, AttributeError):
+                continue
+        
+        # Define confidence bands
+        def get_confidence_band(confidence):
+            if confidence >= 0.9:
+                return "Very High (90-100%)"
+            elif confidence >= 0.7:
+                return "High (70-90%)"
+            elif confidence >= 0.5:
+                return "Moderate (50-70%)"
+            else:
+                return "Low (<50%)"
+        
+        # Group by confidence bands
+        confidence_dist = {
+            "Very High (90-100%)": 0,
+            "High (70-90%)": 0,
+            "Moderate (50-70%)": 0,
+            "Low (<50%)": 0
+        }
+        
+        for confidence in confidence_data:
+            band = get_confidence_band(confidence)
+            confidence_dist[band] += 1
+        
+        # Calculate statistics
+        total_processed = len(confidence_data)
+        avg_confidence = sum(confidence_data) / total_processed if confidence_data else 0
+        
+        # Calculate percentages
+        confidence_percentages = {
+            band: round((count / total_processed) * 100, 2) if total_processed > 0 else 0
+            for band, count in confidence_dist.items()
+        }
+        
+        return {
+            "confidence_distribution": {
+                "counts": confidence_dist,
+                "percentages": confidence_percentages
+            },
+            "statistics": {
+                "total_processed": total_processed,
+                "average_confidence": round(avg_confidence * 100, 2),
+                "highest_confidence": round(max(confidence_data) * 100, 2) if confidence_data else 0,
+                "lowest_confidence": round(min(confidence_data) * 100, 2) if confidence_data else 0
+            }
+        }
+    except Exception as e:
+        print(f"Error getting confidence distribution: {str(e)}")
+        return JSONResponse(
+            status_code=500,
+            content={"message": f"Error getting confidence distribution: {str(e)}"}
         )
     finally:
         db.close()

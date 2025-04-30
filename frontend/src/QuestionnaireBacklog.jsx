@@ -115,19 +115,11 @@ function QuestionnaireBacklog() {
     }
   }
 
-  const getStatusColor = (status) => {
-    switch (status) {
-      case 'completed':
-        return 'green'
-      case 'ready':
-        return 'cyan'
-      case 'processing':
-        return 'blue'
-      case 'failed':
-        return 'red'
-      default:
-        return 'gray'
-    }
+  const getStatusColor = (status, downloaded) => {
+    if (status === 'failed') return 'red'
+    if (status === 'processing') return 'blue'
+    if (!downloaded) return 'cyan'
+    return 'green'
   }
 
   return (
@@ -181,10 +173,12 @@ function QuestionnaireBacklog() {
                     }}>
                       <Badge 
                         size="lg"
-                        color={getStatusColor(entry.status)}
+                        color={getStatusColor(entry.status, entry.downloaded)}
                         variant="filled"
                       >
-                        {entry.status === 'ready' ? 'In Review' : entry.status.charAt(0).toUpperCase() + entry.status.slice(1)}
+                        {entry.status === 'failed' ? 'Failed' :
+                         entry.status === 'processing' ? 'Processing' :
+                         !entry.downloaded ? 'In Review' : 'Completed'}
                       </Badge>
                     </div>
                     <Group spacing="sm" ml="auto">

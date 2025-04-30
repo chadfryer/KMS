@@ -364,6 +364,7 @@ async def upload_csv(
     """
     Upload and process CSV files containing questions and answers.
     Tracks progress of processing each entry.
+    Returns similar questions when similarity > 80% for user choice.
     """
     client_id = request.headers.get('x-client-id') or str(id(request))
     if client_id not in progress_queues:
@@ -378,6 +379,7 @@ async def upload_csv(
     total_imported = 0
     total_duplicates = 0
     results = []
+    similar_questions = []
     
     for uploaded_file in file:
         if not uploaded_file.filename.endswith('.csv'):
@@ -447,7 +449,6 @@ async def upload_csv(
             
             db = SessionLocal()
             questionnaires = []
-            duplicates = []
             
             try:
                 for i, row in enumerate(reader, 1):
@@ -468,12 +469,15 @@ async def upload_csv(
                     if not question or not answer_key:
                         continue
                     
-                    # Check for duplicates
-                    similar_q = find_similar_question(db, question, entity)
+                    # Check for similar questions
+                    similar_q = find_similar_question(db, question, entity, threshold=0.8)
                     if similar_q:
-                        duplicates.append({
-                            "question": question,
-                            "similar_to": similar_q.to_dict()
+                        similar_questions.append({
+                            "new_question": question,
+                            "new_answer": answer_key,
+                            "new_entity": entity,
+                            "similar_to": similar_q.to_dict(),
+                            "similarity": similar(question, similar_q.question)
                         })
                         total_duplicates += 1
                         continue
@@ -500,7 +504,7 @@ async def upload_csv(
                 result = {
                     "filename": uploaded_file.filename,
                     "imported": imported_count,
-                    "duplicates": duplicates
+                    "similar_questions": similar_questions
                 }
                 results.append(result)
                 
@@ -519,9 +523,56 @@ async def upload_csv(
     await send_progress_update(client_id, 0, 0, "Complete")
     
     return {
-        "message": f"Successfully imported {total_imported} questions. Found {total_duplicates} duplicates.",
+        "message": f"Successfully imported {total_imported} questions. Found {total_duplicates} similar questions.",
         "results": results
     }
+
+@app.post("/resolve-similar")
+async def resolve_similar(
+    question: str = Form(...),
+    answer_key: str = Form(...),
+    entity: str = Form(None),
+    comment: str = Form(None),
+    replace_id: int = Form(None)
+):
+    """
+    Resolve a similar question by either:
+    1. Adding the new question if replace_id is not provided
+    2. Replacing the existing question if replace_id is provided
+    """
+    db = SessionLocal()
+    try:
+        if replace_id:
+            # Replace existing question
+            existing = db.query(Questionnaire).filter(Questionnaire.id == replace_id).first()
+            if existing:
+                existing.question = question
+                existing.answer_key = answer_key
+                existing.entity = entity
+                existing.comment = comment
+                db.commit()
+                return existing.to_dict()
+        
+        # Add new question
+        new_questionnaire = Questionnaire(
+            question=question,
+            answer_key=answer_key,
+            entity=entity,
+            comment=comment
+        )
+        db.add(new_questionnaire)
+        db.commit()
+        db.refresh(new_questionnaire)
+        return new_questionnaire.to_dict()
+    
+    except Exception as e:
+        db.rollback()
+        return JSONResponse(
+            status_code=500,
+            content={"message": f"Error resolving similar question: {str(e)}"}
+        )
+    finally:
+        db.close()
 
 @app.post("/process-questionnaire")
 async def process_questionnaire(

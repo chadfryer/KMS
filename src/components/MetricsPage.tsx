@@ -1,4 +1,7 @@
-import React, { useEffect, useState } from 'react';
+/// <reference types="react" />
+import React from 'react';
+import type { FC, ReactElement } from 'react';
+import { MantineProvider, Container, Title, Group, Paper, Stack, Text } from '@mantine/core';
 import {
   LineChart,
   Line,
@@ -9,11 +12,27 @@ import {
   XAxis,
   YAxis,
   CartesianGrid,
-  Tooltip,
+  Tooltip as RechartsTooltip,
   Legend,
   ResponsiveContainer,
   Cell
 } from 'recharts';
+import { theme } from '../mantine.config';
+
+// Import type declarations
+import '../types/mantine';
+import '../types/recharts';
+import '../types/global';
+
+// Add HTML element types
+declare global {
+  namespace JSX {
+    interface IntrinsicElements {
+      div: React.DetailedHTMLProps<React.HTMLAttributes<HTMLDivElement>, HTMLDivElement>;
+      span: React.DetailedHTMLProps<React.HTMLAttributes<HTMLSpanElement>, HTMLSpanElement>;
+    }
+  }
+}
 
 interface MetricsData {
   monthlyEntries?: {
@@ -99,12 +118,20 @@ interface MetricsData {
 
 const COLORS = ['#0088FE', '#00C49F', '#FFBB28', '#FF8042', '#8884d8'];
 
-const MetricsPage: React.FC = () => {
-  const [metrics, setMetrics] = useState<MetricsData>({});
-  const [loading, setLoading] = useState(true);
-  const [error, setError] = useState<string | null>(null);
+const LoadingSpinner: FC = () => {
+  return <div className="flex justify-center items-center h-screen">Loading metrics...</div>;
+};
 
-  useEffect(() => {
+const ErrorMessage: FC<{ message: string }> = ({ message }) => {
+  return <div className="text-red-500 text-center p-4">{message}</div>;
+};
+
+const MetricsPage: FC = () => {
+  const [metrics, setMetrics] = React.useState<MetricsData>({});
+  const [loading, setLoading] = React.useState(true);
+  const [error, setError] = React.useState<string | null>(null);
+
+  React.useEffect(() => {
     const fetchMetrics = async () => {
       try {
         setLoading(true);
@@ -143,209 +170,248 @@ const MetricsPage: React.FC = () => {
   }, []);
 
   if (loading) {
-    return <div className="flex justify-center items-center h-screen">Loading metrics...</div>;
+    return <LoadingSpinner />;
   }
 
   if (error) {
-    return <div className="text-red-500 text-center p-4">{error}</div>;
+    return <ErrorMessage message={error} />;
   }
 
   return (
-    <div className="p-6 max-w-7xl mx-auto">
-      <h1 className="text-3xl font-bold mb-8 text-shadow">System Metrics Dashboard</h1>
+    <MantineProvider theme={theme}>
+      <Container>
+        <Stack>
+          <Title>System Metrics Dashboard</Title>
 
-      {/* System Summary */}
-      <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mb-8">
-        <div className="card">
-          <h2 className="card-title">Total Metrics</h2>
-          <div className="space-y-3">
-            <div>
-              <div className="metric-value">{metrics.systemSummary?.total_metrics.total_questions}</div>
-              <div className="metric-label">Total Questions</div>
+          {/* System Summary */}
+          <Group grow>
+            <Paper>
+              <Group position="apart">
+                <Title order={2}>Total Metrics</Title>
+              </Group>
+              <Stack>
+                <Group>
+                  <Text size="xl">{metrics.systemSummary?.total_metrics.total_questions}</Text>
+                  <Text>Total Questions</Text>
+                </Group>
+                <Group>
+                  <Text size="xl">{metrics.systemSummary?.total_metrics.total_entities}</Text>
+                  <Text>Total Entities</Text>
+                </Group>
+                <Group>
+                  <Text size="xl">{metrics.systemSummary?.total_metrics.days_active}</Text>
+                  <Text>Days Active</Text>
+                </Group>
+              </Stack>
+            </Paper>
+            <Paper>
+              <Group position="apart">
+                <Title order={2}>Recent Activity</Title>
+              </Group>
+              <Stack>
+                <Group>
+                  <Text size="xl">{metrics.systemSummary?.activity_metrics.last_24h_submissions}</Text>
+                  <Text>Last 24 Hours</Text>
+                </Group>
+                <Group>
+                  <Text size="xl">{metrics.systemSummary?.activity_metrics.last_7d_submissions}</Text>
+                  <Text>Last 7 Days</Text>
+                </Group>
+                <Group>
+                  <Text size="xl">{metrics.systemSummary?.activity_metrics.average_daily_submissions}</Text>
+                  <Text>Average Daily</Text>
+                </Group>
+              </Stack>
+            </Paper>
+            <Paper>
+              <Group position="apart">
+                <Title order={2}>Timeline</Title>
+              </Group>
+              <Stack>
+                <Group>
+                  <Text size="xl">
+                    {new Date(metrics.systemSummary?.timeline_metrics.first_entry || '').toLocaleDateString()}
+                  </Text>
+                  <Text>First Entry</Text>
+                </Group>
+                <Group>
+                  <Text size="xl">
+                    {new Date(metrics.systemSummary?.timeline_metrics.latest_entry || '').toLocaleDateString()}
+                  </Text>
+                  <Text>Latest Entry</Text>
+                </Group>
+              </Stack>
+            </Paper>
+          </Group>
+
+          {/* Monthly Submissions Trend */}
+          <Paper>
+            <Group position="apart">
+              <Title order={2}>Monthly Submissions Trend</Title>
+            </Group>
+            <div className="h-80">
+              <ResponsiveContainer width="100%" height="100%">
+                <LineChart data={metrics.monthlyEntries?.monthly_counts}>
+                  <CartesianGrid strokeDasharray="3 3" />
+                  <XAxis dataKey="month" />
+                  <YAxis />
+                  <RechartsTooltip 
+                    wrapperStyle={{ backgroundColor: 'white', padding: '1rem', borderRadius: '0.5rem', boxShadow: '0 2px 4px rgba(0,0,0,0.1)', border: '1px solid #e2e8f0' }}
+                    labelStyle={{ fontWeight: 600, marginBottom: '0.5rem' }}
+                    formatter={(value: any) => [`${value} submissions`, 'Count']}
+                  />
+                  <Legend />
+                  <Line type="monotone" dataKey="count" stroke="#8884d8" name="Submissions" />
+                </LineChart>
+              </ResponsiveContainer>
             </div>
-            <div>
-              <div className="metric-value">{metrics.systemSummary?.total_metrics.total_entities}</div>
-              <div className="metric-label">Total Entities</div>
-            </div>
-            <div>
-              <div className="metric-value">{metrics.systemSummary?.total_metrics.days_active}</div>
-              <div className="metric-label">Days Active</div>
-            </div>
-          </div>
-        </div>
-        <div className="card">
-          <h2 className="card-title">Recent Activity</h2>
-          <div className="space-y-3">
-            <div>
-              <div className="metric-value">{metrics.systemSummary?.activity_metrics.last_24h_submissions}</div>
-              <div className="metric-label">Last 24 Hours</div>
-            </div>
-            <div>
-              <div className="metric-value">{metrics.systemSummary?.activity_metrics.last_7d_submissions}</div>
-              <div className="metric-label">Last 7 Days</div>
-            </div>
-            <div>
-              <div className="metric-value">{metrics.systemSummary?.activity_metrics.average_daily_submissions}</div>
-              <div className="metric-label">Average Daily</div>
-            </div>
-          </div>
-        </div>
-        <div className="card">
-          <h2 className="card-title">Timeline</h2>
-          <div className="space-y-3">
-            <div>
-              <div className="metric-value">
-                {new Date(metrics.systemSummary?.timeline_metrics.first_entry || '').toLocaleDateString()}
+          </Paper>
+
+          {/* Entity Distribution and Complexity Analysis */}
+          <Group grow>
+            <Paper>
+              <Group position="apart">
+                <Title order={2}>Entity Distribution</Title>
+              </Group>
+              <div className="h-80">
+                <ResponsiveContainer width="100%" height="100%">
+                  <PieChart>
+                    <Pie
+                      data={metrics.entityDistribution?.entity_distribution}
+                      dataKey="count"
+                      nameKey="entity"
+                      cx="50%"
+                      cy="50%"
+                      outerRadius={80}
+                      label
+                    >
+                      {metrics.entityDistribution?.entity_distribution.map((entry, index) => (
+                        <Cell key={`cell-${index}`} fill={COLORS[index % COLORS.length]} />
+                      ))}
+                    </Pie>
+                    <RechartsTooltip 
+                      wrapperStyle={{ backgroundColor: 'white', padding: '1rem', borderRadius: '0.5rem', boxShadow: '0 2px 4px rgba(0,0,0,0.1)', border: '1px solid #e2e8f0' }}
+                      formatter={(value: any, name: any, props: any) => [
+                        `Count: ${value}`,
+                        `${props.payload.entity} (${props.payload.percentage.toFixed(2)}%)`
+                      ]}
+                    />
+                    <Legend />
+                  </PieChart>
+                </ResponsiveContainer>
               </div>
-              <div className="metric-label">First Entry</div>
-            </div>
-            <div>
-              <div className="metric-value">
-                {new Date(metrics.systemSummary?.timeline_metrics.latest_entry || '').toLocaleDateString()}
+            </Paper>
+
+            <Paper>
+              <Group position="apart">
+                <Title order={2}>Question Complexity</Title>
+              </Group>
+              <div className="h-80">
+                <ResponsiveContainer width="100%" height="100%">
+                  <BarChart data={Object.entries(metrics.complexityAnalysis?.complexity_distribution.counts || {}).map(([key, value]) => ({
+                    name: key,
+                    count: value
+                  }))}>
+                    <CartesianGrid strokeDasharray="3 3" />
+                    <XAxis dataKey="name" />
+                    <YAxis />
+                    <RechartsTooltip 
+                      wrapperStyle={{ backgroundColor: 'white', padding: '1rem', borderRadius: '0.5rem', boxShadow: '0 2px 4px rgba(0,0,0,0.1)', border: '1px solid #e2e8f0' }}
+                      formatter={(value: any) => [`${value} questions`, 'Count']}
+                    />
+                    <Legend />
+                    <Bar dataKey="count" fill="#8884d8" name="Questions" />
+                  </BarChart>
+                </ResponsiveContainer>
               </div>
-              <div className="metric-label">Latest Entry</div>
+            </Paper>
+          </Group>
+
+          {/* Confidence Distribution */}
+          <Paper>
+            <Group position="apart">
+              <Title order={2}>Answer Confidence Distribution</Title>
+            </Group>
+            <div className="h-80">
+              <ResponsiveContainer width="100%" height="100%">
+                <BarChart data={Object.entries(metrics.confidenceDistribution?.confidence_distribution.counts || {}).map(([key, value]) => ({
+                  name: key,
+                  count: value
+                }))}>
+                  <CartesianGrid strokeDasharray="3 3" />
+                  <XAxis dataKey="name" />
+                  <YAxis />
+                  <RechartsTooltip 
+                    wrapperStyle={{ backgroundColor: 'white', padding: '1rem', borderRadius: '0.5rem', boxShadow: '0 2px 4px rgba(0,0,0,0.1)', border: '1px solid #e2e8f0' }}
+                    formatter={(value: any) => [`${value} answers`, 'Count']}
+                  />
+                  <Legend />
+                  <Bar dataKey="count" fill="#00C49F" name="Answers" />
+                </BarChart>
+              </ResponsiveContainer>
             </div>
-          </div>
-        </div>
-      </div>
+            <div className="mt-4 grid grid-cols-2 gap-4">
+              <Group>
+                <Text size="xl">{metrics.confidenceDistribution?.statistics.total_processed}</Text>
+                <Text>Total Processed</Text>
+              </Group>
+              <Group>
+                <Text size="xl">{metrics.confidenceDistribution?.statistics.average_confidence}%</Text>
+                <Text>Average Confidence</Text>
+              </Group>
+              <Group>
+                <Text size="xl">{metrics.confidenceDistribution?.statistics.highest_confidence}%</Text>
+                <Text>Highest Confidence</Text>
+              </Group>
+              <Group>
+                <Text size="xl">{metrics.confidenceDistribution?.statistics.lowest_confidence}%</Text>
+                <Text>Lowest Confidence</Text>
+              </Group>
+            </div>
+          </Paper>
 
-      {/* Monthly Submissions Trend */}
-      <div className="card mb-8">
-        <h2 className="card-title">Monthly Submissions Trend</h2>
-        <div className="h-80">
-          <ResponsiveContainer width="100%" height="100%">
-            <LineChart data={metrics.monthlyEntries?.monthly_counts}>
-              <CartesianGrid strokeDasharray="3 3" />
-              <XAxis dataKey="month" />
-              <YAxis />
-              <Tooltip />
-              <Legend />
-              <Line type="monotone" dataKey="count" stroke="#8884d8" name="Submissions" />
-            </LineChart>
-          </ResponsiveContainer>
-        </div>
-      </div>
-
-      {/* Entity Distribution and Complexity Analysis */}
-      <div className="grid grid-cols-1 md:grid-cols-2 gap-8 mb-8">
-        <div className="card">
-          <h2 className="card-title">Entity Distribution</h2>
-          <div className="h-80">
-            <ResponsiveContainer width="100%" height="100%">
-              <PieChart>
-                <Pie
-                  data={metrics.entityDistribution?.entity_distribution}
-                  dataKey="count"
-                  nameKey="entity"
-                  cx="50%"
-                  cy="50%"
-                  outerRadius={80}
-                  label
-                >
-                  {metrics.entityDistribution?.entity_distribution.map((entry, index) => (
-                    <Cell key={`cell-${index}`} fill={COLORS[index % COLORS.length]} />
-                  ))}
-                </Pie>
-                <Tooltip />
-                <Legend />
-              </PieChart>
-            </ResponsiveContainer>
-          </div>
-        </div>
-
-        <div className="card">
-          <h2 className="card-title">Question Complexity</h2>
-          <div className="h-80">
-            <ResponsiveContainer width="100%" height="100%">
-              <BarChart data={Object.entries(metrics.complexityAnalysis?.complexity_distribution.counts || {}).map(([key, value]) => ({
-                name: key,
-                count: value
-              }))}>
-                <CartesianGrid strokeDasharray="3 3" />
-                <XAxis dataKey="name" />
-                <YAxis />
-                <Tooltip />
-                <Legend />
-                <Bar dataKey="count" fill="#8884d8" name="Questions" />
-              </BarChart>
-            </ResponsiveContainer>
-          </div>
-        </div>
-      </div>
-
-      {/* Confidence Distribution */}
-      <div className="card mb-8">
-        <h2 className="card-title">Answer Confidence Distribution</h2>
-        <div className="h-80">
-          <ResponsiveContainer width="100%" height="100%">
-            <BarChart data={Object.entries(metrics.confidenceDistribution?.confidence_distribution.counts || {}).map(([key, value]) => ({
-              name: key,
-              count: value
-            }))}>
-              <CartesianGrid strokeDasharray="3 3" />
-              <XAxis dataKey="name" />
-              <YAxis />
-              <Tooltip />
-              <Legend />
-              <Bar dataKey="count" fill="#00C49F" name="Answers" />
-            </BarChart>
-          </ResponsiveContainer>
-        </div>
-        <div className="mt-4 grid grid-cols-2 gap-4">
-          <div>
-            <div className="metric-value">{metrics.confidenceDistribution?.statistics.total_processed}</div>
-            <div className="metric-label">Total Processed</div>
-          </div>
-          <div>
-            <div className="metric-value">{metrics.confidenceDistribution?.statistics.average_confidence}%</div>
-            <div className="metric-label">Average Confidence</div>
-          </div>
-          <div>
-            <div className="metric-value">{metrics.confidenceDistribution?.statistics.highest_confidence}%</div>
-            <div className="metric-label">Highest Confidence</div>
-          </div>
-          <div>
-            <div className="metric-value">{metrics.confidenceDistribution?.statistics.lowest_confidence}%</div>
-            <div className="metric-label">Lowest Confidence</div>
-          </div>
-        </div>
-      </div>
-
-      {/* Daily Trends */}
-      <div className="card">
-        <h2 className="card-title">Daily Submission Trends</h2>
-        <div className="h-80">
-          <ResponsiveContainer width="100%" height="100%">
-            <LineChart data={metrics.dailyTrends?.daily_counts}>
-              <CartesianGrid strokeDasharray="3 3" />
-              <XAxis dataKey="date" />
-              <YAxis />
-              <Tooltip />
-              <Legend />
-              <Line type="monotone" dataKey="count" stroke="#00C49F" name="Daily Submissions" />
-            </LineChart>
-          </ResponsiveContainer>
-        </div>
-        <div className="mt-4 grid grid-cols-2 md:grid-cols-4 gap-4">
-          <div>
-            <div className="metric-value">{metrics.dailyTrends?.statistics.average_daily}</div>
-            <div className="metric-label">Average</div>
-          </div>
-          <div>
-            <div className="metric-value">{metrics.dailyTrends?.statistics.maximum_daily}</div>
-            <div className="metric-label">Maximum</div>
-          </div>
-          <div>
-            <div className="metric-value">{metrics.dailyTrends?.statistics.minimum_daily}</div>
-            <div className="metric-label">Minimum</div>
-          </div>
-          <div>
-            <div className="metric-value">{metrics.dailyTrends?.statistics.total_submissions}</div>
-            <div className="metric-label">Total</div>
-          </div>
-        </div>
-      </div>
-    </div>
+          {/* Daily Trends */}
+          <Paper>
+            <Group position="apart">
+              <Title order={2}>Daily Submission Trends</Title>
+            </Group>
+            <div className="h-80">
+              <ResponsiveContainer width="100%" height="100%">
+                <LineChart data={metrics.dailyTrends?.daily_counts}>
+                  <CartesianGrid strokeDasharray="3 3" />
+                  <XAxis dataKey="date" />
+                  <YAxis />
+                  <RechartsTooltip 
+                    wrapperStyle={{ backgroundColor: 'white', padding: '1rem', borderRadius: '0.5rem', boxShadow: '0 2px 4px rgba(0,0,0,0.1)', border: '1px solid #e2e8f0' }}
+                    formatter={(value: any) => [`${value} submissions`, 'Count']}
+                  />
+                  <Legend />
+                  <Line type="monotone" dataKey="count" stroke="#00C49F" name="Daily Submissions" />
+                </LineChart>
+              </ResponsiveContainer>
+            </div>
+            <div className="mt-4 grid grid-cols-2 md:grid-cols-4 gap-4">
+              <Group>
+                <Text size="xl">{metrics.dailyTrends?.statistics.average_daily}</Text>
+                <Text>Average</Text>
+              </Group>
+              <Group>
+                <Text size="xl">{metrics.dailyTrends?.statistics.maximum_daily}</Text>
+                <Text>Maximum</Text>
+              </Group>
+              <Group>
+                <Text size="xl">{metrics.dailyTrends?.statistics.minimum_daily}</Text>
+                <Text>Minimum</Text>
+              </Group>
+              <Group>
+                <Text size="xl">{metrics.dailyTrends?.statistics.total_submissions}</Text>
+                <Text>Total</Text>
+              </Group>
+            </div>
+          </Paper>
+        </Stack>
+      </Container>
+    </MantineProvider>
   );
 };
 

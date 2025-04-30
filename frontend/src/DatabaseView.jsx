@@ -139,7 +139,7 @@ function DatabaseView({ onBack }) {
 
   return (
     <Container size="xl" py={40}>
-      <Stack spacing={40}>
+      <Stack>
         <Group position="apart" align="center">
           <Stack spacing={4}>
             <Title order={1} size={32}>Knowledge Base</Title>
@@ -147,7 +147,7 @@ function DatabaseView({ onBack }) {
           </Stack>
         </Group>
 
-        <Paper p={40} radius="lg" withBorder mb={40}>
+        <Paper p="xl" radius="lg" withBorder>
           <Stack spacing="xl">
             <Group position="apart">
               <Title order={2} size={24}>Search Questions</Title>
@@ -219,15 +219,15 @@ function DatabaseView({ onBack }) {
         </Paper>
 
         {isLoading ? (
-          <Paper p={40} radius="lg" withBorder>
-            <Stack align="center" spacing={40}>
+          <Paper p="xl" radius="lg" withBorder>
+            <Stack align="center">
               <Loader size="lg" />
               <Text size="sm" c="dimmed">Loading questions...</Text>
             </Stack>
           </Paper>
         ) : error ? (
-          <Paper p={40} radius="lg" withBorder>
-            <Stack align="center" spacing={40}>
+          <Paper p="xl" radius="lg" withBorder>
+            <Stack align="center">
               <Text c="red" size="lg">{error}</Text>
               <Button variant="light" color="red" onClick={() => window.location.reload()}>
                 Try Again
@@ -235,8 +235,8 @@ function DatabaseView({ onBack }) {
             </Stack>
           </Paper>
         ) : (
-          <Paper p={40} radius="lg" withBorder>
-            <Stack spacing={40}>
+          <Paper p="xl" radius="lg" withBorder>
+            <Stack>
               <Group position="apart" style={{ width: '100%', justifyContent: 'space-between' }}>
                 <Title order={2} size={24}>Knowledge Base</Title>
                 <Group spacing="xs" style={{ marginLeft: 'auto' }}>

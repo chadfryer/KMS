@@ -11,6 +11,7 @@ function MetricsView() {
     complexityAnalysis: { data: null, loading: true, error: null },
     systemSummary: { data: null, loading: true, error: null },
     confidenceDistribution: { data: null, loading: true, error: null },
+    reviewStatus: { data: null, loading: true, error: null },
   })
 
   useEffect(() => {
@@ -77,11 +78,17 @@ function MetricsView() {
       updateMetric('systemSummary', data, error)
     }
 
+    const fetchReviewStatus = async () => {
+      const { data, error } = await fetchMetric('review-status')
+      updateMetric('reviewStatus', data, error)
+    }
+
     // Fetch all metrics independently
     fetchMonthlyData()
     fetchEntityDistribution()
     fetchComplexityAnalysis()
     fetchSystemSummary()
+    fetchReviewStatus()
   }, [])
 
   const renderMetricSection = (title, content, loading, error) => {
@@ -299,6 +306,89 @@ function MetricsView() {
     return renderMetricSection("System Summary", content, loading, error)
   }
 
+  const renderReviewStatus = () => {
+    const { data, loading, error } = metrics.reviewStatus
+    const COLORS = {
+      'In Review': '#FFD700',
+      'Completed': '#00CC00',
+      'Failed': '#CC0000',
+      'Processing': '#666666'
+    }
+
+    const content = data ? (
+      <Stack spacing="md">
+        <Group position="apart">
+          <div>
+            <Text size="xl" weight={700} c="dimmed">{data.total_questionnaires}</Text>
+            <Text size="sm" c="dimmed">Total Questionnaires</Text>
+          </div>
+          <div>
+            <Text size="xl" weight={700} c="dimmed" color="yellow">{data.in_review}</Text>
+            <Text size="sm" c="dimmed">In Review</Text>
+          </div>
+          <div>
+            <Text size="xl" weight={700} c="dimmed" color="green">{data.completed}</Text>
+            <Text size="sm" c="dimmed">Completed</Text>
+          </div>
+        </Group>
+
+        <div style={{ height: 300 }}>
+          <ResponsiveContainer width="100%" height="100%">
+            <BarChart
+              data={[
+                { name: 'In Review', value: data.in_review, percentage: data.percentages.in_review },
+                { name: 'Completed', value: data.completed, percentage: data.percentages.completed },
+                { name: 'Failed', value: data.failed, percentage: data.percentages.failed },
+                { name: 'Processing', value: data.processing, percentage: data.percentages.processing }
+              ]}
+              margin={{ top: 20, right: 30, left: 20, bottom: 50 }}
+            >
+              <CartesianGrid strokeDasharray="3 3" stroke="#444444" />
+              <XAxis 
+                dataKey="name"
+                angle={-45}
+                textAnchor="end"
+                height={60}
+                tick={{ fill: 'var(--mantine-color-dimmed)' }}
+              />
+              <YAxis 
+                tick={{ fill: 'var(--mantine-color-dimmed)' }}
+                label={{ 
+                  value: 'Number of Questionnaires',
+                  angle: -90,
+                  position: 'insideLeft',
+                  fill: 'var(--mantine-color-dimmed)',
+                  style: { textAnchor: 'middle' }
+                }}
+              />
+              <Tooltip
+                contentStyle={{
+                  backgroundColor: '#333333',
+                  border: '1px solid #444444',
+                  color: 'var(--mantine-color-dimmed)'
+                }}
+                labelStyle={{ color: 'var(--mantine-color-dimmed)' }}
+                formatter={(value, name, props) => [`${value} (${props.payload.percentage}%)`, props.payload.name]}
+              />
+              <Bar 
+                dataKey="value"
+                radius={[4, 4, 0, 0]}
+              >
+                {data && Object.entries(COLORS).map(([name, color]) => (
+                  <Cell key={name} fill={color} />
+                ))}
+              </Bar>
+            </BarChart>
+          </ResponsiveContainer>
+        </div>
+      </Stack>
+    ) : (
+      <Text c="dimmed">No review status data available</Text>
+    )
+
+    return renderMetricSection("Review Status", content, loading, error)
+  }
+
   return (
     <Container size="xl" py={40}>
       <Stack spacing={40}>
@@ -333,6 +423,15 @@ function MetricsView() {
               <Stack spacing="xl">
                 <Title order={2} size={24}>Question Complexity</Title>
                 {renderComplexityAnalysis()}
+              </Stack>
+            </Paper>
+          </Grid.Col>
+
+          <Grid.Col span={12}>
+            <Paper p={40} radius="lg" withBorder>
+              <Stack spacing="xl">
+                <Title order={2} size={24}>Review Status</Title>
+                {renderReviewStatus()}
               </Stack>
             </Paper>
           </Grid.Col>

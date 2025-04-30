@@ -1488,6 +1488,76 @@ async def clear_questionnaire_backlog():
             content={"message": f"Database connection error: {str(e)}"}
         )
 
+@app.get("/metrics/review-status")
+async def get_review_status_metrics():
+    """
+    Get metrics about questionnaire review status.
+    
+    Returns:
+        dict: Counts of questionnaires in review and completed
+    """
+    try:
+        db = SessionLocal()
+        
+        # Get total count
+        total_count = db.query(func.count(ProcessedQuestionnaire.id)).scalar()
+        
+        # Get count of questionnaires in review (not downloaded and completed)
+        in_review_count = (
+            db.query(func.count(ProcessedQuestionnaire.id))
+            .filter(
+                ProcessedQuestionnaire.status == 'completed',
+                ProcessedQuestionnaire.downloaded == False
+            )
+            .scalar()
+        )
+        
+        # Get count of completed questionnaires (downloaded)
+        completed_count = (
+            db.query(func.count(ProcessedQuestionnaire.id))
+            .filter(
+                ProcessedQuestionnaire.status == 'completed',
+                ProcessedQuestionnaire.downloaded == True
+            )
+            .scalar()
+        )
+        
+        # Get count of failed questionnaires
+        failed_count = (
+            db.query(func.count(ProcessedQuestionnaire.id))
+            .filter(ProcessedQuestionnaire.status == 'failed')
+            .scalar()
+        )
+        
+        # Get count of processing questionnaires
+        processing_count = (
+            db.query(func.count(ProcessedQuestionnaire.id))
+            .filter(ProcessedQuestionnaire.status == 'processing')
+            .scalar()
+        )
+        
+        return {
+            "total_questionnaires": total_count,
+            "in_review": in_review_count,
+            "completed": completed_count,
+            "failed": failed_count,
+            "processing": processing_count,
+            "percentages": {
+                "in_review": round((in_review_count / total_count) * 100, 2) if total_count > 0 else 0,
+                "completed": round((completed_count / total_count) * 100, 2) if total_count > 0 else 0,
+                "failed": round((failed_count / total_count) * 100, 2) if total_count > 0 else 0,
+                "processing": round((processing_count / total_count) * 100, 2) if total_count > 0 else 0
+            }
+        }
+    except Exception as e:
+        print(f"Error getting review status metrics: {str(e)}")
+        return JSONResponse(
+            status_code=500,
+            content={"message": f"Error getting review status metrics: {str(e)}"}
+        )
+    finally:
+        db.close()
+
 if __name__ == "__main__":
     import uvicorn
     uvicorn.run(app, host="0.0.0.0", port=8000) 

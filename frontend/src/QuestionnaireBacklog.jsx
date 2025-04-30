@@ -1,77 +1,134 @@
 import React, { useState, useEffect } from 'react'
-import { Container, Title, Paper, Stack, Text, Badge, Group, Loader, Button, Modal, Textarea, ActionIcon, Tooltip } from '@mantine/core'
+import { 
+  Container, 
+  Title, 
+  Paper, 
+  Stack, 
+  Text, 
+  Badge, 
+  Group, 
+  Loader, 
+  Button, 
+  Textarea
+} from '@mantine/core'
 import { IconDownload, IconEdit, IconCheck, IconX } from '@tabler/icons-react'
 
 function QuestionnaireBacklog() {
   const [backlogEntries, setBacklogEntries] = useState([])
   const [isLoading, setIsLoading] = useState(true)
   const [error, setError] = useState(null)
-  const [editModalOpen, setEditModalOpen] = useState(false)
+  const [showPopup, setShowPopup] = useState(false)
   const [selectedEntry, setSelectedEntry] = useState(null)
   const [editedAnswers, setEditedAnswers] = useState({})
   const [acceptedAnswers, setAcceptedAnswers] = useState([])
 
-  const fetchBacklog = async () => {
-    try {
-      const response = await fetch('http://localhost:8000/questionnaire-backlog')
-      if (!response.ok) {
-        throw new Error('Failed to fetch backlog entries')
-      }
-      const data = await response.json()
-      setBacklogEntries(data.entries)
-    } catch (error) {
-      console.error('Error fetching backlog:', error)
-      setError(error.message)
-    } finally {
-      setIsLoading(false)
-    }
-  }
-
   useEffect(() => {
-    fetchBacklog()
+    let isMounted = true;
+
+    const fetchData = async () => {
+      try {
+        const response = await fetch('http://localhost:8000/questionnaire-backlog')
+        if (!response.ok) {
+          throw new Error(`HTTP error! status: ${response.status}`)
+        }
+        const data = await response.json()
+        if (isMounted) {
+          setBacklogEntries(data.entries || [])
+          setIsLoading(false)
+        }
+      } catch (error) {
+        console.error('Error fetching backlog:', error)
+        if (isMounted) {
+          setError(error.message)
+          setIsLoading(false)
+        }
+      }
+    }
+
+    fetchData()
+
+    return () => {
+      isMounted = false
+    }
   }, [])
 
   const handleDownload = async (entryId, filename) => {
     try {
-      // Download the file
-      const response = await fetch(`http://localhost:8000/questionnaire-backlog/${entryId}/download`)
-      if (!response.ok) throw new Error('Failed to download file')
-      
-      const blob = await response.blob()
-      const url = window.URL.createObjectURL(blob)
-      const a = document.createElement('a')
-      a.href = url
-      a.download = `processed_${filename}`
-      document.body.appendChild(a)
-      a.click()
-      window.URL.revokeObjectURL(url)
-      document.body.removeChild(a)
+      // Create a copy of the current entries to modify
+      const updatedEntries = backlogEntries.map(entry => 
+        entry.id === entryId ? { ...entry, downloading: true } : entry
+      );
+      setBacklogEntries(updatedEntries);
 
-      // Mark as downloaded
+      const response = await fetch(`http://localhost:8000/questionnaire-backlog/${entryId}/download`);
+      if (!response.ok) throw new Error('Failed to download file');
+      
+      const blob = await response.blob();
+      const url = window.URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = `processed_${filename}`;
+      document.body.appendChild(a);
+      a.click();
+      window.URL.revokeObjectURL(url);
+      document.body.removeChild(a);
+
       const markResponse = await fetch(`http://localhost:8000/questionnaire-backlog/${entryId}/mark-downloaded`, {
         method: 'POST'
-      })
-      if (!markResponse.ok) throw new Error('Failed to mark as downloaded')
+      });
+      if (!markResponse.ok) throw new Error('Failed to mark as downloaded');
 
-      // Refresh the backlog to update UI
-      fetchBacklog()
+      // Update the local state directly instead of fetching again
+      const finalEntries = backlogEntries.map(entry => 
+        entry.id === entryId ? { ...entry, downloaded: true, downloading: false } : entry
+      );
+      setBacklogEntries(finalEntries);
     } catch (error) {
-      console.error('Error downloading file:', error)
-      setError(error.message)
+      console.error('Error downloading file:', error);
+      setError(error.message);
+      // Reset the downloading state on error
+      const resetEntries = backlogEntries.map(entry => 
+        entry.id === entryId ? { ...entry, downloading: false } : entry
+      );
+      setBacklogEntries(resetEntries);
     }
-  }
+  };
 
   const handleEdit = (entry) => {
-    setSelectedEntry(entry)
-    setEditedAnswers(entry.edited_answers || {})
-    setAcceptedAnswers(entry.low_confidence_answers
-      .filter(a => a.accepted)
-      .map(a => a.index))
-    setEditModalOpen(true)
+    if (!entry) return;
+    
+    console.log('Opening edit popup for entry:', entry);
+    
+    // Initialize editedAnswers with current answers
+    const initialAnswers = {};
+    (entry.low_confidence_answers || []).forEach(answer => {
+      if (answer && answer.index !== undefined) {
+        initialAnswers[answer.index] = answer.answer || '';
+      }
+    });
+    
+    console.log('Initializing answers:', initialAnswers);
+    
+    setSelectedEntry(entry);
+    setEditedAnswers(initialAnswers);
+    setAcceptedAnswers(
+      (entry.low_confidence_answers || [])
+        .filter(a => a && a.accepted)
+        .map(a => a.index)
+        .filter(index => index !== undefined)
+    );
+    setShowPopup(true);
+  }
+
+  const handleClosePopup = () => {
+    setShowPopup(false)
+    setSelectedEntry(null)
+    setEditedAnswers({})
+    setAcceptedAnswers([])
   }
 
   const handleSaveEdits = async () => {
-    if (!selectedEntry) return
+    if (!selectedEntry) return;
 
     try {
       const response = await fetch(`http://localhost:8000/questionnaire-backlog/${selectedEntry.id}/update-answers`, {
@@ -85,14 +142,20 @@ function QuestionnaireBacklog() {
         })
       })
 
-      if (!response.ok) throw new Error('Failed to save edits')
+      if (!response.ok) {
+        throw new Error('Failed to save edits')
+      }
 
-      // Refresh the backlog
-      fetchBacklog()
-      setEditModalOpen(false)
+      const updatedResponse = await fetch('http://localhost:8000/questionnaire-backlog')
+      if (!updatedResponse.ok) {
+        throw new Error('Failed to fetch updated data')
+      }
+      const updatedData = await updatedResponse.json()
+      setBacklogEntries(updatedData.entries || [])
+
+      handleClosePopup()
     } catch (error) {
       console.error('Error saving edits:', error)
-      setError(error.message)
     }
   }
 
@@ -165,6 +228,31 @@ function QuestionnaireBacklog() {
                     <Text size="lg" fw={500} style={{ flex: '1', minWidth: 0, overflow: 'hidden', textOverflow: 'ellipsis' }}>
                       {entry.filename}
                     </Text>
+                    <Group spacing="sm" position="right" ml="auto" style={{ zIndex: 2 }}>
+                      {entry.status !== 'failed' && entry.status !== 'processing' && (
+                        <Button
+                          variant="light"
+                          color="dark"
+                          leftSection={<IconEdit size={16} />}
+                          onClick={() => handleEdit(entry)}
+                        >
+                          Edit
+                        </Button>
+                      )}
+                      {entry.can_download && (
+                        <Button
+                          variant="light"
+                          color={entry.downloaded ? "gray" : "dark"}
+                          leftSection={<IconDownload size={16} />}
+                          onClick={() => handleDownload(entry.id, entry.filename)}
+                          disabled={entry.status === 'processing' || entry.status === 'failed' || entry.downloading}
+                          loading={entry.downloading}
+                        >
+                          {entry.downloading ? 'Downloading...' : 
+                           entry.downloaded ? 'Download Again' : 'Download'}
+                        </Button>
+                      )}
+                    </Group>
                     <div style={{ 
                       position: 'absolute',
                       left: '50%',
@@ -181,30 +269,6 @@ function QuestionnaireBacklog() {
                          !entry.downloaded ? 'In Review' : 'Completed'}
                       </Badge>
                     </div>
-                    <Group spacing="sm" ml="auto">
-                      {entry.status === 'completed' && (
-                        <Button
-                          variant="light"
-                          color="dark"
-                          leftSection={<IconEdit size={16} />}
-                          onClick={() => handleEdit(entry)}
-                          disabled={entry.status === 'processing' || entry.status === 'failed'}
-                        >
-                          Edit
-                        </Button>
-                      )}
-                      {entry.can_download && (
-                        <Button
-                          variant="light"
-                          color={entry.downloaded ? "gray" : "dark"}
-                          leftSection={<IconDownload size={16} />}
-                          onClick={() => handleDownload(entry.id, entry.filename)}
-                          disabled={entry.status === 'processing' || entry.status === 'failed'}
-                        >
-                          {entry.downloaded ? 'Download Again' : 'Download'}
-                        </Button>
-                      )}
-                    </Group>
                   </div>
 
                   <Text size="sm" c="dimmed">Processed {formatDate(entry.created_at)}</Text>
@@ -248,48 +312,103 @@ function QuestionnaireBacklog() {
         )}
       </Stack>
 
-      <Modal
-        opened={editModalOpen}
-        onClose={() => setEditModalOpen(false)}
-        title={
-          <Group>
-            <Text size="lg" fw={500}>Edit Questions in Review</Text>
-            <Text size="sm" c="dimmed">(below 50% confidence)</Text>
-          </Group>
-        }
-        size="xl"
-      >
-        {selectedEntry && (
+      {showPopup && selectedEntry && (
+        <div style={{
+          position: 'fixed',
+          top: '50%',
+          left: '50%',
+          transform: 'translate(-50%, -50%)',
+          backgroundColor: '#f5f5f5',
+          color: '#2C2E33',
+          padding: '20px',
+          borderRadius: '8px',
+          boxShadow: '0 4px 15px rgba(0, 0, 0, 0.1)',
+          width: '90%',
+          maxWidth: '800px',
+          maxHeight: '90vh',
+          overflowY: 'auto',
+          zIndex: 1000
+        }}>
+          <div style={{
+            display: 'flex',
+            justifyContent: 'space-between',
+            alignItems: 'center',
+            marginBottom: '20px',
+            borderBottom: '1px solid #e0e0e0',
+            paddingBottom: '10px'
+          }}>
+            <Text size="lg" fw={700} c="#000000">Edit Questions in Review</Text>
+            <Button 
+              variant="subtle" 
+              color="dark" 
+              onClick={handleClosePopup}
+              leftSection={<IconX size={16} />}
+            >
+              Close
+            </Button>
+          </div>
+
           <Stack spacing="md">
-            {selectedEntry.low_confidence_answers
-              .filter(answer => answer.confidence < 0.5)
-              .map((answer, idx) => (
-              <Paper key={idx} p="md" withBorder>
+            {selectedEntry.low_confidence_answers.map((answer, idx) => (
+              <Paper 
+                key={`${answer.index}-${idx}`}
+                p="md" 
+                withBorder 
+                shadow="sm"
+                bg="#2C2E33"
+                style={{ border: '1px solid #373A40' }}
+              >
                 <Stack spacing="xs">
                   <Group position="apart">
-                    <Text size="sm" fw={500}>Question:</Text>
-                    <Badge color="blue">Confidence: {Math.round(answer.confidence * 100)}%</Badge>
+                    <Text size="sm" fw={500} c="white">Question:</Text>
+                    <Badge 
+                      color="#D35400"
+                      styles={{
+                        root: {
+                          backgroundColor: '#D35400',
+                          opacity: 0.85
+                        }
+                      }}
+                    >
+                      Confidence: {Math.round(answer.confidence * 100)}%
+                    </Badge>
                   </Group>
-                  <Text>{answer.question}</Text>
+                  <Text c="white">{answer.question}</Text>
                   
-                  <Text size="sm" fw={500}>Original Answer:</Text>
-                  <Text>{answer.answer}</Text>
+                  <Text size="sm" fw={500} c="white">Original Answer:</Text>
+                  <Text c="#909296">{answer.answer}</Text>
                   
-                  <Text size="sm" fw={500}>Edit Answer:</Text>
+                  <Text size="sm" fw={500} c="white">Edit Answer:</Text>
                   <Textarea
-                    value={editedAnswers[answer.index] || answer.answer}
-                    onChange={(event) => setEditedAnswers(prev => ({
-                      ...prev,
-                      [answer.index]: event.currentTarget.value
-                    }))}
-                    minRows={2}
+                    value={editedAnswers[answer.index] ?? answer.answer}
+                    onChange={(event) => {
+                      const newValue = event.currentTarget?.value;
+                      if (newValue !== undefined) {
+                        setEditedAnswers(prev => ({
+                          ...prev,
+                          [answer.index]: newValue
+                        }));
+                      }
+                    }}
+                    rows={4}
+                    minRows={4}
+                    styles={{
+                      input: {
+                        backgroundColor: 'white',
+                        color: '#2C2E33',
+                        border: '1px solid #373A40',
+                        '&:focus': {
+                          borderColor: '#228BE6'
+                        }
+                      }
+                    }}
                   />
                   
                   <Group position="right" spacing="xs">
                     <Button
                       variant={acceptedAnswers.includes(answer.index) ? "filled" : "light"}
                       color="green"
-                      leftSection={<IconCheck size={16} />}
+                      leftSection={<IconCheck size={16} color={acceptedAnswers.includes(answer.index) ? "white" : "black"} />}
                       onClick={() => {
                         if (acceptedAnswers.includes(answer.index)) {
                           setAcceptedAnswers(prev => prev.filter(i => i !== answer.index))
@@ -306,12 +425,24 @@ function QuestionnaireBacklog() {
             ))}
             
             <Group position="right" mt="xl">
-              <Button variant="light" onClick={() => setEditModalOpen(false)}>Cancel</Button>
+              <Button variant="light" onClick={handleClosePopup}>Cancel</Button>
               <Button onClick={handleSaveEdits}>Save Changes</Button>
             </Group>
           </Stack>
-        )}
-      </Modal>
+        </div>
+      )}
+
+      {showPopup && (
+        <div style={{
+          position: 'fixed',
+          top: 0,
+          left: 0,
+          right: 0,
+          bottom: 0,
+          backgroundColor: 'rgba(0, 0, 0, 0.5)',
+          zIndex: 999
+        }} onClick={handleClosePopup} />
+      )}
     </Container>
   )
 }

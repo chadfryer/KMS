@@ -29,6 +29,7 @@ import pandas as pd
 import asyncio
 from asyncio import Queue
 import threading
+from dotenv import load_dotenv
 
 # Global progress tracking
 progress_queues = {}
@@ -178,8 +179,15 @@ templates = Jinja2Templates(directory="frontend/dist")
 async def serve_frontend(request: Request):
     return templates.TemplateResponse("index.html", {"request": request})
 
-# Initialize AI processor
-ai_processor = AIProcessor('questionnaire.db')
+# Load environment variables
+load_dotenv()
+
+# Initialize AI processor with Llama service configuration
+model_variant = os.getenv('LLAMA_MODEL_VARIANT', 'latest')
+ai_processor = AIProcessor(
+    'questionnaire.db',
+    llm_variant=model_variant
+)
 
 def similar(a: str, b: str) -> float:
     """

@@ -1,14 +1,31 @@
 version: '3.8'
 
 services:
-  kms:
-    build:
-      context: .
-      dockerfile: Dockerfile
+  app:
+    build: .
     ports:
       - "8000:8000"
     volumes:
       - ./questionnaire.db:/app/questionnaire.db
+      - /var/run/docker.sock:/var/run/docker.sock  # Allow container to use Docker Model Runner
     environment:
       - PYTHONUNBUFFERED=1
-    restart: unless-stopped 
+      - LLAMA_MODEL_VARIANT=latest  # Can be changed to specific variant
+    deploy:
+      resources:
+        limits:
+          memory: 16G  # Adjust based on model variant
+        reservations:
+          memory: 8G   # Minimum memory needed for latest variant
+
+  llama:
+    image: ai/llama3.3
+    ports:
+      - "8080:8080"
+    deploy:
+      resources:
+        reservations:
+          devices:
+            - driver: nvidia
+              count: 1
+              capabilities: [gpu] 

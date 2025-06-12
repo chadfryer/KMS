@@ -3,14 +3,16 @@ from typing import List, Dict
 from difflib import SequenceMatcher
 import re
 from collections import Counter
+from llama_service import LlamaService
 
 class AIProcessor:
-    def __init__(self, db_path: str):
+    def __init__(self, db_path: str, llm_host: str = "localhost", llm_port: int = 8080):
         self.db_path = db_path
         self.questions = []
         self.answers = []
         self.ids = []
         self._load_knowledge_base()
+        self.llm_service = LlamaService(host=llm_host, port=llm_port)
         print(f"AI Processor initialized with {len(self.questions)} questions in knowledge base")
     
     def _load_knowledge_base(self):
@@ -295,11 +297,15 @@ class AIProcessor:
             similar_qa = self.find_similar_questions(question)
             
             if not similar_qa:
+                # No similar questions found, use LLM
+                print("No similar questions found, using LLM")
+                llm_result = self.llm_service.generate_answer(question)
                 return {
                     'question': question,
-                    'answer': "No similar questions found in the knowledge base.",
-                    'confidence': 0.0,
-                    'is_ai_generated': False,
+                    'answer': llm_result['answer'],
+                    'confidence': llm_result['confidence'],
+                    'is_ai_generated': True,
+                    'source': 'llm',
                     'similar_questions': []
                 }
             
@@ -318,48 +324,51 @@ class AIProcessor:
                     'answer': best_match['answer'],
                     'confidence': confidence,
                     'is_ai_generated': False,
+                    'source': 'exact_match',
                     'similar_questions': similar_qa
                 }
             
-            # Always try to generate a synthesized answer for other cases
-            print("Attempting to synthesize answer from multiple sources")
-            # Get all answers with similarity > 0.2
-            relevant_answers = [qa for qa in similar_qa if qa['similarity'] > 0.2]
+            # For medium to low confidence, use LLM with context
+            if confidence < 0.8:
+                print("Using LLM with context from similar questions")
+                context = {'similar_questions': [
+                    {'question': qa['question'], 'answer': qa['answer']}
+                    for qa in similar_qa if qa['similarity'] > 0.3
+                ]}
+                llm_result = self.llm_service.generate_answer(question, context)
+                llm_result['similar_questions'] = similar_qa
+                return llm_result
             
-            if relevant_answers:
-                print(f"Found {len(relevant_answers)} relevant answers for synthesis")
-                synthesized_answer = self._synthesize_answer(question, relevant_answers)
+            # For high confidence but not exact match, synthesize from similar questions
+            print("Synthesizing answer from similar questions")
+            synthesized_answer = self._synthesize_answer(question, similar_qa)
+            
+            if synthesized_answer:
+                confidence_note = " (Based on similar questions in our knowledge base)"
+                final_answer = synthesized_answer
+                if final_answer[-1] in '.!?':
+                    final_answer = final_answer[:-1] + confidence_note + final_answer[-1]
+                else:
+                    final_answer += confidence_note + '.'
                 
-                if synthesized_answer:
-                    confidence_note = ""
-                    if confidence < 0.5:
-                        confidence_note = " (Based on multiple similar questions)"
-                    elif confidence < 0.8:
-                        confidence_note = " (Based on closely related questions)"
-                    
-                    final_answer = synthesized_answer
-                    if confidence_note:
-                        if final_answer[-1] in '.!?':
-                            final_answer = final_answer[:-1] + confidence_note + final_answer[-1]
-                        else:
-                            final_answer += confidence_note + '.'
-                    
-                    return {
-                        'question': question,
-                        'answer': final_answer,
-                        'confidence': confidence,
-                        'is_ai_generated': True,
-                        'similar_questions': similar_qa
-                    }
+                return {
+                    'question': question,
+                    'answer': final_answer,
+                    'confidence': confidence,
+                    'is_ai_generated': True,
+                    'source': 'synthesis',
+                    'similar_questions': similar_qa
+                }
             
-            # If synthesis failed, return best match
-            return {
-                'question': question,
-                'answer': best_match['answer'],
-                'confidence': confidence,
-                'is_ai_generated': confidence < 0.95,  # Consider it AI-generated if not a very close match
-                'similar_questions': similar_qa
-            }
+            # If synthesis failed, use LLM with context
+            print("Synthesis failed, using LLM with context")
+            context = {'similar_questions': [
+                {'question': qa['question'], 'answer': qa['answer']}
+                for qa in similar_qa if qa['similarity'] > 0.3
+            ]}
+            llm_result = self.llm_service.generate_answer(question, context)
+            llm_result['similar_questions'] = similar_qa
+            return llm_result
             
         except Exception as e:
             print(f"Error processing question: {e}")
@@ -368,6 +377,7 @@ class AIProcessor:
                 'answer': "Error processing question. Please try again.",
                 'confidence': 0.0,
                 'is_ai_generated': False,
+                'source': 'error',
                 'similar_questions': []
             }
 

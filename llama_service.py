@@ -4,23 +4,19 @@ from typing import Dict, Optional
 import requests
 
 class LlamaService:
-    def __init__(self, model_variant: str = "latest"):
+    def __init__(self, host: str = "localhost", port: int = 11434):
         """
-        Initialize the Llama service using Docker Model Runner.
+        Initialize the Llama service using Ollama API.
         
         Args:
-            model_variant (str): Which model variant to use:
-                - "latest": Latest optimized version
-                - "7B-Q4_K_M": 4-bit quantized (smaller, faster)
-                - "7B-Q8_0": 8-bit quantized (better quality)
+            host (str): Ollama server host
+            port (int): Ollama server port
         """
-        self.model_variant = model_variant
-        # Ensure model is pulled
-        subprocess.run(["docker", "model", "pull", f"ai/llama3.3:{model_variant}"], check=True)
+        self.base_url = f"http://{host}:{port}"
         
     def generate_answer(self, question: str, context: Dict = None) -> Dict:
         """
-        Generate an answer using the Llama model via Docker Model Runner.
+        Generate an answer using the Llama model via Ollama API.
         
         Args:
             question (str): The question to answer
@@ -33,38 +29,35 @@ class LlamaService:
             # Construct the prompt with context if available
             prompt = self._construct_prompt(question, context)
             
-            # Prepare the command with model parameters
-            cmd = [
-                "docker", "model", "run",
-                f"ai/llama3.3:{self.model_variant}",
-                "--temperature", "0.7",
-                "--top-p", "0.95",
-                "--top-k", "50",
-                "--max-tokens", "500",
-                "--repeat-penalty", "1.1",
-                "--prompt", prompt
-            ]
+            # Prepare the request
+            url = f"{self.base_url}/api/generate"
+            data = {
+                "model": "llama2",
+                "prompt": prompt,
+                "temperature": 0.7,
+                "top_p": 0.95,
+                "top_k": 50,
+                "num_predict": 500,
+                "repeat_penalty": 1.1
+            }
             
-            # Run the model and capture output
-            result = subprocess.run(cmd, capture_output=True, text=True, check=True)
-            response = result.stdout.strip()
+            # Make the API request
+            response = requests.post(url, json=data)
+            response.raise_for_status()
             
-            # Parse the response if it's JSON
-            try:
-                response_data = json.loads(response)
-                answer = response_data.get('text', response)
-            except json.JSONDecodeError:
-                answer = response
+            # Parse the response
+            response_data = response.json()
+            answer = response_data.get('response', '')
             
             return {
                 'answer': answer,
                 'is_ai_generated': True,
                 'confidence': 0.8 if context and context.get('similar_questions') else 0.6,
-                'source': 'llama3.3'
+                'source': 'llama2'
             }
             
-        except subprocess.CalledProcessError as e:
-            print(f"Error running Llama model: {e.stderr}")
+        except requests.RequestException as e:
+            print(f"Error calling Ollama API: {str(e)}")
             return {
                 'answer': "Error generating answer with AI. Please try again.",
                 'is_ai_generated': True,
@@ -83,7 +76,7 @@ class LlamaService:
     def _construct_prompt(self, question: str, context: Dict = None) -> str:
         """
         Construct a prompt for Llama using the question and available context.
-        Uses Llama 3.3's instruction format.
+        Uses Llama 2's instruction format.
         """
         system_prompt = "You are a helpful assistant that answers questions based on provided context and your knowledge. Always provide accurate and relevant information."
         
@@ -92,13 +85,14 @@ class LlamaService:
             for i, qa in enumerate(context['similar_questions'][:3], 1):
                 context_str += f"Q{i}: {qa['question']}\nA{i}: {qa['answer']}\n\n"
             
-            prompt = f"""<|system|>{system_prompt}</|system|>
-<|context|>{context_str}</|context|>
-<|user|>{question}</|user|>
-<|assistant|>"""
+            prompt = f"""[INST] <<SYS>>{system_prompt}<</SYS>>
+
+{context_str}
+
+{question} [/INST]"""
         else:
-            prompt = f"""<|system|>{system_prompt}</|system|>
-<|user|>{question}</|user|>
-<|assistant|>"""
+            prompt = f"""[INST] <<SYS>>{system_prompt}<</SYS>>
+
+{question} [/INST]"""
         
         return prompt 

@@ -1,0 +1,21 @@
+FROM ollama/ollama:latest
+
+USER root
+RUN apt-get update && apt-get install -y curl && rm -rf /var/lib/apt/lists/*
+
+# Create ollama directories with correct permissions
+RUN mkdir -p /.ollama /root/.ollama && \
+    chown -R 1000:1000 /.ollama /root/.ollama && \
+    chmod -R 755 /.ollama /root/.ollama
+
+# Create symlink to ensure both paths work
+RUN ln -s /root/.ollama/* /.ollama/ || true
+
+# Set environment variable for Ollama
+ENV OLLAMA_HOST=0.0.0.0
+
+# Switch back to the default user
+USER 1000
+
+# Set the working directory
+WORKDIR /root/.ollama 

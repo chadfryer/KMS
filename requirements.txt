@@ -8,4 +8,5 @@ SQLAlchemy==1.4.23
 aiosqlite==0.17.0
 Jinja2==3.0.1
 python-jose[cryptography]==3.3.0
-ctransformers==0.2.27 
+ctransformers==0.2.27
+pandas==2.1.4 

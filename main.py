@@ -183,10 +183,10 @@ async def serve_frontend(request: Request):
 load_dotenv()
 
 # Initialize AI processor with Llama service configuration
-model_variant = os.getenv('LLAMA_MODEL_VARIANT', 'latest')
 ai_processor = AIProcessor(
     'questionnaire.db',
-    llm_variant=model_variant
+    llm_host='llama',  # Use the service name from docker-compose
+    llm_port=11434     # Use the internal port from the Llama container
 )
 
 def similar(a: str, b: str) -> float:
@@ -376,7 +376,7 @@ async def send_progress_update(client_id: str, current: int, total: int, phase: 
 @app.post("/upload-csv")
 async def upload_csv(
     background_tasks: BackgroundTasks,
-    file: list[UploadFile] = File(description="Multiple files as UploadFile"),
+    file: list[UploadFile] = File(..., description="Multiple files as UploadFile"),
     request: Request = None
 ):
     """

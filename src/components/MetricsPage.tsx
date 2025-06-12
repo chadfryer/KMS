@@ -1,6 +1,6 @@
 /// <reference types="react" />
 import React from 'react';
-import type { FC, ReactElement } from 'react';
+import type { FC } from 'react';
 import { MantineProvider, Container, Title, Group, Paper, Stack, Text } from '@mantine/core';
 import {
   LineChart,
@@ -251,14 +251,14 @@ const MetricsPage: FC = () => {
             </Group>
             <div className="h-80">
               <ResponsiveContainer width="100%" height="100%">
-                <LineChart data={metrics.monthlyEntries?.monthly_counts}>
+                <LineChart data={metrics.monthlyEntries?.monthly_counts || []}>
                   <CartesianGrid strokeDasharray="3 3" />
                   <XAxis dataKey="month" />
                   <YAxis />
                   <RechartsTooltip 
                     wrapperStyle={{ backgroundColor: 'white', padding: '1rem', borderRadius: '0.5rem', boxShadow: '0 2px 4px rgba(0,0,0,0.1)', border: '1px solid #e2e8f0' }}
                     labelStyle={{ fontWeight: 600, marginBottom: '0.5rem' }}
-                    formatter={(value: any) => [`${value} submissions`, 'Count']}
+                    formatter={(value: number) => [`${value} submissions`, 'Count']}
                   />
                   <Legend />
                   <Line type="monotone" dataKey="count" stroke="#8884d8" name="Submissions" />
@@ -277,7 +277,7 @@ const MetricsPage: FC = () => {
                 <ResponsiveContainer width="100%" height="100%">
                   <PieChart>
                     <Pie
-                      data={metrics.entityDistribution?.entity_distribution}
+                      data={metrics.entityDistribution?.entity_distribution || []}
                       dataKey="count"
                       nameKey="entity"
                       cx="50%"
@@ -285,13 +285,13 @@ const MetricsPage: FC = () => {
                       outerRadius={80}
                       label
                     >
-                      {metrics.entityDistribution?.entity_distribution.map((entry, index) => (
+                      {(metrics.entityDistribution?.entity_distribution || []).map((_entry, index) => (
                         <Cell key={`cell-${index}`} fill={COLORS[index % COLORS.length]} />
                       ))}
                     </Pie>
                     <RechartsTooltip 
                       wrapperStyle={{ backgroundColor: 'white', padding: '1rem', borderRadius: '0.5rem', boxShadow: '0 2px 4px rgba(0,0,0,0.1)', border: '1px solid #e2e8f0' }}
-                      formatter={(value: any, name: any, props: any) => [
+                      formatter={(value: number, _name: string, props: any) => [
                         `Count: ${value}`,
                         `${props.payload.entity} (${props.payload.percentage.toFixed(2)}%)`
                       ]}
@@ -377,13 +377,13 @@ const MetricsPage: FC = () => {
             </Group>
             <div className="h-80">
               <ResponsiveContainer width="100%" height="100%">
-                <LineChart data={metrics.dailyTrends?.daily_counts}>
+                <LineChart data={metrics.dailyTrends?.daily_counts || []}>
                   <CartesianGrid strokeDasharray="3 3" />
                   <XAxis dataKey="date" />
                   <YAxis />
                   <RechartsTooltip 
                     wrapperStyle={{ backgroundColor: 'white', padding: '1rem', borderRadius: '0.5rem', boxShadow: '0 2px 4px rgba(0,0,0,0.1)', border: '1px solid #e2e8f0' }}
-                    formatter={(value: any) => [`${value} submissions`, 'Count']}
+                    formatter={(value: number) => [`${value} submissions`, 'Count']}
                   />
                   <Legend />
                   <Line type="monotone" dataKey="count" stroke="#00C49F" name="Daily Submissions" />

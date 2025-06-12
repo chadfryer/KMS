@@ -168,6 +168,16 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
+# Mount the frontend static files at the root path
+app.mount("/assets", StaticFiles(directory="frontend/dist/assets"), name="static")
+
+# Serve index.html for the root path
+templates = Jinja2Templates(directory="frontend/dist")
+
+@app.get("/")
+async def serve_frontend(request: Request):
+    return templates.TemplateResponse("index.html", {"request": request})
+
 # Initialize AI processor
 ai_processor = AIProcessor('questionnaire.db')
 
@@ -1605,6 +1615,23 @@ async def get_review_status_metrics():
         return JSONResponse(
             status_code=500,
             content={"message": f"Error getting review status metrics: {str(e)}"}
+        )
+    finally:
+        db.close()
+
+@app.delete("/clear-knowledge-base")
+async def clear_knowledge_base():
+    """Clear all entries from the questionnaires table."""
+    try:
+        db = SessionLocal()
+        db.query(Questionnaire).delete()
+        db.commit()
+        return {"message": "Knowledge base cleared successfully"}
+    except Exception as e:
+        db.rollback()
+        return JSONResponse(
+            status_code=500,
+            content={"message": f"Error clearing knowledge base: {str(e)}"}
         )
     finally:
         db.close()

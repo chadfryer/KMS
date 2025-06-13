@@ -1,0 +1,12 @@
+FROM postgres:16-alpine
+
+# Create initialization script
+RUN echo '\
+    CREATE DATABASE kmsdb; \
+    CREATE USER kmsuser WITH PASSWORD '\''kmspassword'\''; \
+    GRANT ALL PRIVILEGES ON DATABASE kmsdb TO kmsuser; \
+    ALTER DATABASE kmsdb OWNER TO kmsuser; \
+    \connect kmsdb; \
+    GRANT ALL PRIVILEGES ON ALL TABLES IN SCHEMA public TO kmsuser; \
+    ALTER DEFAULT PRIVILEGES IN SCHEMA public GRANT ALL ON TABLES TO kmsuser; \
+' > /docker-entrypoint-initdb.d/init.sql 

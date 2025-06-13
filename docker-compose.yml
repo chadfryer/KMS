@@ -1,45 +1,74 @@
 version: '3.8'
 
 services:
-  app:
-    build: .
+  frontend:
+    build:
+      context: ./frontend
+      dockerfile: Dockerfile
     ports:
-      - "8001:8000"  # Map container port 8000 to host port 8001
-    volumes:
-      - ./questionnaire.db:/app/questionnaire.db
-      - /var/run/docker.sock:/var/run/docker.sock  # Allow container to use Docker Model Runner
+      - "5173:5173"
     environment:
-      - PYTHONUNBUFFERED=1
-      - LLAMA_MODEL_VARIANT=latest  # Can be changed to specific variant
-    deploy:
-      resources:
-        limits:
-          memory: 16G  # Adjust based on model variant
-        reservations:
-          memory: 8G   # Minimum memory needed for latest variant
+      - VITE_API_URL=http://backend:8000
     depends_on:
-      llama:
-        condition: service_started
-    restart: unless-stopped
+      - backend
 
-  llama:
+  backend:
+    build:
+      context: .
+      dockerfile: Dockerfile.backend
+    ports:
+      - "8000:8000"
+    environment:
+      - DATABASE_URL=postgresql://kmsuser:kmspassword@db:5432/kmsdb
+      - OLLAMA_API_URL=http://llm:11434
+    volumes:
+      - model_cache:/app/models
+    depends_on:
+      db:
+        condition: service_healthy
+      llm:
+        condition: service_started
+
+  db:
+    build:
+      context: .
+      dockerfile: Dockerfile.db
+    environment:
+      - POSTGRES_DB=postgres
+      - POSTGRES_USER=postgres
+      - POSTGRES_PASSWORD=postgres
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    ports:
+      - "5432:5432"
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U postgres"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+
+  migration:
+    build:
+      context: .
+      dockerfile: Dockerfile.migration
+    environment:
+      - DATABASE_URL=postgresql://kmsuser:kmspassword@db:5432/kmsdb
+    depends_on:
+      db:
+        condition: service_healthy
+
+  llm:
     build:
       context: .
       dockerfile: Dockerfile.llama
     ports:
-      - "8080:11434"
+      - "11434:11434"
     volumes:
-      - ollama_root:/root/.ollama
-      - ollama_root:/.ollama
-    environment:
-      - OLLAMA_HOST=0.0.0.0
-    deploy:
-      resources:
-        limits:
-          memory: 16G
-        reservations:
-          memory: 8G
-    restart: unless-stopped
+      - ollama_models:/root/.ollama
 
 volumes:
-  ollama_root: {} 
+  postgres_data:
+  ollama_models:
+  model_cache:
+  frontend_node_modules:
+  frontend_src: 

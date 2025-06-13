@@ -31,12 +31,19 @@ from asyncio import Queue
 import threading
 from dotenv import load_dotenv
 
+# Load environment variables
+load_dotenv()
+
 # Global progress tracking
 progress_queues = {}
 
 # Database configuration
-SQLALCHEMY_DATABASE_URL = "sqlite:///./questionnaire.db"
-engine = create_engine(SQLALCHEMY_DATABASE_URL)
+DATABASE_URL = os.getenv(
+    "DATABASE_URL",
+    "postgresql://kmsuser:kmspassword@db:5432/kmsdb"
+)
+
+engine = create_engine(DATABASE_URL)
 SessionLocal = sessionmaker(autocommit=False, autoflush=False, bind=engine)
 Base = declarative_base()
 
@@ -178,9 +185,6 @@ templates = Jinja2Templates(directory="frontend/dist")
 @app.get("/")
 async def serve_frontend(request: Request):
     return templates.TemplateResponse("index.html", {"request": request})
-
-# Load environment variables
-load_dotenv()
 
 # Initialize AI processor with Llama service configuration
 ai_processor = AIProcessor(

@@ -1,10 +1,10 @@
 .git
 .gitignore
-.env
+#.env
 __pycache__
 *.pyc
 .DS_Store
 node_modules
 dist
-.venv
+#.venv
 README.md 

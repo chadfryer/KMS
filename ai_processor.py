@@ -1,13 +1,16 @@
-import sqlite3
+import psycopg2
 from typing import List, Dict
 from difflib import SequenceMatcher
 import re
 from collections import Counter
 from llama_service import LlamaService
+import os
+from dotenv import load_dotenv
 
 class AIProcessor:
-    def __init__(self, db_path: str, llm_host: str = "localhost", llm_port: int = 8080):
-        self.db_path = db_path
+    def __init__(self, db_url: str = None, llm_host: str = "localhost", llm_port: int = 11434):
+        load_dotenv()
+        self.db_url = db_url or os.getenv("DATABASE_URL", "postgresql://kmsuser:kmspassword@db:5432/kmsdb")
         self.questions = []
         self.answers = []
         self.ids = []
@@ -19,16 +22,22 @@ class AIProcessor:
         """Load the knowledge base."""
         conn = None
         try:
-            conn = sqlite3.connect(self.db_path)
+            conn = psycopg2.connect(self.db_url)
             cursor = conn.cursor()
             
             # Check if the questionnaires table exists
-            cursor.execute("SELECT name FROM sqlite_master WHERE type='table' AND name='questionnaires'")
-            if not cursor.fetchone():
+            cursor.execute("""
+                SELECT EXISTS (
+                    SELECT FROM information_schema.tables 
+                    WHERE table_schema = 'public' 
+                    AND table_name = 'questionnaires'
+                )
+            """)
+            if not cursor.fetchone()[0]:
                 print("Questionnaires table does not exist. Creating it...")
                 cursor.execute("""
                     CREATE TABLE questionnaires (
-                        id INTEGER PRIMARY KEY AUTOINCREMENT,
+                        id SERIAL PRIMARY KEY,
                         question TEXT NOT NULL,
                         answer_key TEXT NOT NULL,
                         entity TEXT,
@@ -42,39 +51,16 @@ class AIProcessor:
             cursor.execute("SELECT id, question, answer_key FROM questionnaires")
             results = cursor.fetchall()
             
-            if results:
-                # Clean and process the data
-                cleaned_results = []
-                for r in results:
-                    # Split on pipe character and clean
-                    question = r[1].strip().replace('|', '')
-                    answer = r[2].strip().replace('|', '')
-                    if question and answer:  # Only include non-empty QA pairs
-                        cleaned_results.append((r[0], question, answer))
-                
-                if cleaned_results:
-                    self.questions = [r[1] for r in cleaned_results]
-                    self.answers = [r[2] for r in cleaned_results]
-                    self.ids = [r[0] for r in cleaned_results]
-                    print(f"Loaded {len(cleaned_results)} questions from database")
-                    for i, (q, a) in enumerate(zip(self.questions[:5], self.answers[:5])):
-                        print(f"Sample Question {i+1}: {q}")
-                        print(f"Sample Answer {i+1}: {a}\n")
-                else:
-                    print("No valid questions found after cleaning")
-            else:
-                print("No questions found in database")
+            self.questions = [row[1] for row in results]
+            self.answers = [row[2] for row in results]
+            self.ids = [row[0] for row in results]
             
-        except sqlite3.Error as e:
-            print(f"Database error: {e}")
         except Exception as e:
-            print(f"Error loading knowledge base: {e}")
+            print(f"Error loading knowledge base: {str(e)}")
+            raise
         finally:
             if conn:
-                try:
-                    conn.close()
-                except:
-                    pass
+                conn.close()
     
     def _calculate_similarity(self, a: str, b: str) -> float:
         """Calculate similarity between two strings using a combination of methods."""

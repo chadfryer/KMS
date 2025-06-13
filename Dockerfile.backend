@@ -1,0 +1,35 @@
+FROM python:3.9-slim
+
+# Install system dependencies
+RUN apt-get update && apt-get install -y \
+    build-essential \
+    gcc \
+    libpq-dev \
+    && rm -rf /var/lib/apt/lists/*
+
+# Create a non-root user
+RUN useradd -m -u 1000 user
+WORKDIR /app
+
+# Install Python dependencies
+COPY requirements.txt .
+RUN pip install --no-cache-dir psycopg2-binary==2.9.9 && \
+    pip install --no-cache-dir -r requirements.txt
+
+# Copy application files
+COPY main.py .
+COPY ai_processor.py .
+COPY test_questions.csv .
+COPY templates ./templates
+
+# Create models directory for caching
+RUN mkdir -p /app/models && chown -R user:user /app/models
+
+# Switch to non-root user
+USER user
+
+# Expose the port the app runs on
+EXPOSE 8000
+
+# Run the application
+CMD ["uvicorn", "main:app", "--host", "0.0.0.0", "--port", "8000"] 

@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react'
-import { Container, Title, Paper, Stack, Text, Button, Loader, ScrollArea, TextInput, Group, Pagination, ActionIcon, Select, Box, Badge, Modal, Tooltip } from '@mantine/core'
-import { IconSearch, IconArrowUp, IconArrowDown, IconInfoCircle } from '@tabler/icons-react'
+import { Container, Title, Paper, Stack, Text, Button, Loader, ScrollArea, TextInput, Group, Pagination, ActionIcon, Select, Box, Badge, Modal, Tooltip, Table, Textarea } from '@mantine/core'
+import { IconSearch, IconArrowUp, IconArrowDown, IconInfoCircle, IconEdit, IconTrash, IconLock, IconLockOpen, IconX } from '@tabler/icons-react'
 
 function DatabaseView({ onBack }) {
   const [questions, setQuestions] = useState([])
@@ -8,9 +8,8 @@ function DatabaseView({ onBack }) {
   const [isLoading, setIsLoading] = useState(true)
   const [error, setError] = useState(null)
   const [searchQuery, setSearchQuery] = useState('')
-  const [selectedEntity, setSelectedEntity] = useState('')
   const [isSearching, setIsSearching] = useState(false)
-  const [searchResults, setSearchResults] = useState(null)
+  const [searchResults, setSearchResults] = useState([])
   const [sortConfig, setSortConfig] = useState({ key: 'created_at', direction: 'desc' })
   const [currentPage, setCurrentPage] = useState(1)
   const itemsPerPage = 10
@@ -18,6 +17,11 @@ function DatabaseView({ onBack }) {
     opened: false,
     results: null
   })
+  const [selectedItem, setSelectedItem] = useState(null)
+  const [showEditModal, setShowEditModal] = useState(false)
+  const [editedItem, setEditedItem] = useState({})
+  const [username, setUsername] = useState(localStorage.getItem('username') || '')
+  const [showUsernameModal, setShowUsernameModal] = useState(!localStorage.getItem('username'))
 
   useEffect(() => {
     const fetchQuestions = async () => {
@@ -63,9 +67,6 @@ function DatabaseView({ onBack }) {
     try {
       const params = new URLSearchParams()
       params.append('query', searchQuery)
-      if (selectedEntity) {
-        params.append('entity', selectedEntity)
-      }
       
       const response = await fetch(`http://localhost:8000/search?${params.toString()}`)
       
@@ -137,21 +138,175 @@ function DatabaseView({ onBack }) {
     currentPage * itemsPerPage
   )
 
+  const handleEdit = (item) => {
+    setSelectedItem(item)
+    setEditedItem(item)
+    setShowEditModal(true)
+  }
+
+  const handleCloseEditModal = () => {
+    setSelectedItem(null)
+    setShowEditModal(false)
+  }
+
+  const handleEditSubmit = (e) => {
+    e.preventDefault()
+    // Handle form submission
+  }
+
+  const handleDelete = (id) => {
+    // Handle delete operation
+  }
+
+  const handleSetUsername = (name) => {
+    setUsername(name)
+    localStorage.setItem('username', name)
+    setShowUsernameModal(false)
+  }
+
+  const handleCheckout = async (item) => {
+    if (!username) {
+      setShowUsernameModal(true)
+      return
+    }
+
+    try {
+      const formData = new FormData()
+      formData.append('user', username)
+
+      const response = await fetch(`http://localhost:8000/questionnaires/${item.id}/checkout`, {
+        method: 'POST',
+        body: formData
+      })
+
+      if (response.ok) {
+        const updatedItem = await response.json()
+        setSearchResults(prev => 
+          prev.map(q => q.id === item.id ? updatedItem : q)
+        )
+        setSelectedItem(updatedItem)
+        setEditedItem(updatedItem)
+        setShowEditModal(true)
+      } else {
+        const error = await response.json()
+        alert(error.message)
+      }
+    } catch (error) {
+      console.error('Error checking out questionnaire:', error)
+      alert('Failed to checkout questionnaire')
+    }
+  }
+
+  const handleCheckin = async (e) => {
+    e.preventDefault()
+    if (!selectedItem || !username) return
+
+    try {
+      const formData = new FormData()
+      formData.append('user', username)
+      formData.append('question', editedItem.question)
+      formData.append('answer_key', editedItem.answer_key)
+      formData.append('category', editedItem.category || '')
+      formData.append('sub_category', editedItem.sub_category || '')
+      formData.append('compliance_answer', editedItem.compliance_answer || '')
+      formData.append('notes', editedItem.notes || '')
+
+      const response = await fetch(`http://localhost:8000/questionnaires/${selectedItem.id}/checkin`, {
+        method: 'POST',
+        body: formData
+      })
+
+      if (response.ok) {
+        const updatedItem = await response.json()
+        setSearchResults(prev => 
+          prev.map(q => q.id === selectedItem.id ? updatedItem : q)
+        )
+        setShowEditModal(false)
+        setSelectedItem(null)
+        setEditedItem({})
+      } else {
+        const error = await response.json()
+        alert(error.message)
+      }
+    } catch (error) {
+      console.error('Error checking in questionnaire:', error)
+      alert('Failed to check in questionnaire')
+    }
+  }
+
+  const handleCancelCheckout = async () => {
+    if (!selectedItem || !username) return
+
+    try {
+      const formData = new FormData()
+      formData.append('user', username)
+
+      const response = await fetch(`http://localhost:8000/questionnaires/${selectedItem.id}/cancel-checkout`, {
+        method: 'POST',
+        body: formData
+      })
+
+      if (response.ok) {
+        const updatedItem = await response.json()
+        setSearchResults(prev => 
+          prev.map(q => q.id === selectedItem.id ? updatedItem : q)
+        )
+        setShowEditModal(false)
+        setSelectedItem(null)
+        setEditedItem({})
+      } else {
+        const error = await response.json()
+        alert(error.message)
+      }
+    } catch (error) {
+      console.error('Error canceling checkout:', error)
+      alert('Failed to cancel checkout')
+    }
+  }
+
   return (
     <Container size="xl" py={40}>
       <Stack>
+        <Modal
+          opened={showUsernameModal}
+          onClose={() => setShowUsernameModal(false)}
+          title="Enter Your Username"
+        >
+          <Stack>
+            <TextInput
+              label="Username"
+              value={username}
+              onChange={(e) => setUsername(e.target.value)}
+              placeholder="Enter your username"
+            />
+            <Button onClick={() => handleSetUsername(username)}>Save</Button>
+          </Stack>
+        </Modal>
+
         <Group position="apart" align="center">
           <Stack spacing={4}>
             <Title order={1} size={32}>Knowledge Base</Title>
             <Text c="dimmed" size="lg">View and search through your knowledge base entries</Text>
           </Stack>
+          <Group>
+            <TextInput
+              value={username}
+              onChange={(e) => setUsername(e.target.value)}
+              placeholder="Your username"
+              rightSection={
+                <ActionIcon onClick={() => setShowUsernameModal(true)}>
+                  <IconEdit size={16} />
+                </ActionIcon>
+              }
+            />
+          </Group>
         </Group>
 
         <Paper p="xl" radius="lg" withBorder>
           <Stack spacing="xl">
             <Group position="apart">
               <Title order={2} size={24}>Search Questions</Title>
-              <Tooltip label="Search through the knowledge base using keywords or phrases" position="left">
+              <Tooltip label="Search across all fields: question, answer, category, sub-category, compliance answer, and notes." position="left">
                 <IconInfoCircle size={20} style={{ color: '#94A3B8' }} />
               </Tooltip>
             </Group>
@@ -159,49 +314,21 @@ function DatabaseView({ onBack }) {
               <Stack spacing="md">
                 <TextInput
                   placeholder="Enter keywords to search..."
-                  description={<Box component="span" c="dimmed" style={{ fontSize: '14px' }}>Search for questions using keywords or phrases.</Box>}
+                  description={<Box component="span" c="dimmed" style={{ fontSize: '14px' }}>Search across all fields: question, answer, category, sub-category, compliance answer, and notes.</Box>}
                   value={searchQuery}
                   onChange={(e) => setSearchQuery(e.target.value)}
                   icon={<IconSearch size={20} />}
                   size="md"
-                />
-                <Select
-                  label={<Text c="#FFFFFF" fw={700}>Filter by Entity</Text>}
-                  description={<Box component="span" c="dimmed" style={{ fontSize: '14px' }}>Narrow down results to a specific entity.</Box>}
-                  placeholder="All entities"
-                  data={[
-                    { value: '', label: 'All entities', color: '#333333' },
-                    ...Array.from(new Set(questions.map(q => q.entity)))
-                      .filter(Boolean)
-                      .map(entity => ({
-                        value: entity,
-                        label: entity
-                      }))
-                  ]}
-                  value={selectedEntity}
-                  onChange={setSelectedEntity}
-                  styles={{
-                    input: {
-                      color: selectedEntity ? '#FFFFFF' : '#333333'
-                    },
-                    item: {
-                      color: '#FFFFFF',
-                      '&[data-selected]': {
-                        color: '#333333'
-                      }
-                    }
-                  }}
                 />
                 <Group position="right">
                   <Button 
                     variant="subtle" 
                     onClick={() => {
                       setSearchQuery('')
-                      setSelectedEntity('')
                       setFilteredQuestions(questions)
                     }}
                   >
-                    Clear Filters
+                    Clear
                   </Button>
                   <Tooltip label="Search the knowledge base">
                     <Button 
@@ -249,38 +376,6 @@ function DatabaseView({ onBack }) {
                       }
                     }}
                     onClick={() => {
-                      const filtered = questions.filter(q => q.entity === 'Mindbody')
-                      setFilteredQuestions(filtered)
-                      setCurrentPage(1)
-                    }}
-                  >
-                    Show Mindbody
-                  </Button>
-                  <Button 
-                    variant="subtle"
-                    size="md"
-                    styles={{
-                      label: {
-                        fontWeight: 600
-                      }
-                    }}
-                    onClick={() => {
-                      const filtered = questions.filter(q => q.entity === 'ClassPass')
-                      setFilteredQuestions(filtered)
-                      setCurrentPage(1)
-                    }}
-                  >
-                    Show ClassPass
-                  </Button>
-                  <Button 
-                    variant="subtle"
-                    size="md"
-                    styles={{
-                      label: {
-                        fontWeight: 600
-                      }
-                    }}
-                    onClick={() => {
                       setFilteredQuestions(questions)
                       setCurrentPage(1)
                     }}
@@ -293,54 +388,57 @@ function DatabaseView({ onBack }) {
                 Showing {paginatedQuestions.length} of {sortedQuestions.length} questions
               </Text>
 
-              {paginatedQuestions.map((question, index) => (
-                <Paper
-                  key={question.id || index}
-                  p="lg"
-                  radius="md"
-                  withBorder
-                  style={{
-                    backgroundColor: index % 2 === 0 ? '#fff' : '#f8f9fa'
-                  }}
-                >
-                  <Stack spacing="md">
-                    <Group position="apart" align="flex-start">
-                      <Box style={{ flex: 1 }}>
-                        <Text size="sm" weight={500} c="dimmed" mb={4}>
-                          Question
-                        </Text>
-                        <Text size="md" c="#333333">{question.question}</Text>
-                      </Box>
-                      <Box style={{ flex: 1 }}>
-                        <Text size="sm" weight={500} c="dimmed" mb={4}>
-                          Answer
-                        </Text>
-                        <Text size="md" c="#333333">{question.answer_key}</Text>
-                      </Box>
-                    </Group>
-                    
-                    <Group position="apart" align="center">
-                      <Stack spacing={4}>
-                        {question.entity && (
-                          <>
-                            <Text size="sm" weight={500} c="dimmed" mb={4}>
-                              Entity
-                            </Text>
-                            <Badge size="lg" variant="dot">
-                              {question.entity}
+              <Table>
+                <thead>
+                  <tr>
+                    <th>Question</th>
+                    <th>Answer</th>
+                    <th>Category</th>
+                    <th>Sub-category</th>
+                    <th>Compliance Answer</th>
+                    <th>Notes</th>
+                    <th>Last Updated</th>
+                    <th>Status</th>
+                    <th>Actions</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {paginatedQuestions.map((item) => (
+                    <tr key={item.id}>
+                      <td>{item.question}</td>
+                      <td>{item.answer_key}</td>
+                      <td>{item.category}</td>
+                      <td>{item.sub_category}</td>
+                      <td>{item.compliance_answer}</td>
+                      <td>{item.notes}</td>
+                      <td>{formatDate(item.last_updated)}</td>
+                      <td>
+                        {item.checked_out_by ? (
+                          <Tooltip label={`Checked out by ${item.checked_out_by} at ${formatDate(item.checked_out_at)}`}>
+                            <Badge color="yellow" leftSection={<IconLock size={14} />}>
+                              Checked Out
                             </Badge>
-                          </>
+                          </Tooltip>
+                        ) : (
+                          <Badge color="green" leftSection={<IconLockOpen size={14} />}>
+                            Available
+                          </Badge>
                         )}
-                        {question.created_at && (
-                          <Text size="sm" c="dimmed">
-                            Added {formatDate(question.created_at)}
-                          </Text>
-                        )}
-                      </Stack>
-                    </Group>
-                  </Stack>
-                </Paper>
-              ))}
+                      </td>
+                      <td>
+                        <Group spacing="xs">
+                          <ActionIcon 
+                            onClick={() => handleCheckout(item)}
+                            disabled={item.checked_out_by && item.checked_out_by !== username}
+                          >
+                            <IconEdit size={20} />
+                          </ActionIcon>
+                        </Group>
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </Table>
 
               {totalPages > 1 && (
                 <Group position="apart" pt="lg">
@@ -375,20 +473,29 @@ function DatabaseView({ onBack }) {
                 searchResultsModal.results.map((result, index) => (
                   <Paper key={index} p="md" withBorder>
                     <Stack spacing="sm">
-                      <Group position="apart">
-                        <Stack spacing={4}>
-                          <Text weight={600}>Question</Text>
-                          <Text>{result.question}</Text>
-                        </Stack>
-                        {result.entity && (
-                          <Badge size="lg" variant="light">
-                            {result.entity}
-                          </Badge>
-                        )}
-                      </Group>
+                      <Stack spacing={4}>
+                        <Text weight={600}>Question</Text>
+                        <Text>{result.question}</Text>
+                      </Stack>
                       <Stack spacing={4}>
                         <Text weight={600}>Answer</Text>
                         <Text>{result.answer_key}</Text>
+                      </Stack>
+                      <Stack spacing={4}>
+                        <Text weight={600}>Category</Text>
+                        <Text>{result.category || '-'}</Text>
+                      </Stack>
+                      <Stack spacing={4}>
+                        <Text weight={600}>Sub-category</Text>
+                        <Text>{result.sub_category || '-'}</Text>
+                      </Stack>
+                      <Stack spacing={4}>
+                        <Text weight={600}>Compliance Answer</Text>
+                        <Text>{result.compliance_answer || '-'}</Text>
+                      </Stack>
+                      <Stack spacing={4}>
+                        <Text weight={600}>Notes</Text>
+                        <Text>{result.notes || '-'}</Text>
                       </Stack>
                       {result.created_at && (
                         <Text size="sm" c="dimmed">
@@ -402,6 +509,59 @@ function DatabaseView({ onBack }) {
             </Stack>
           )}
         </Modal>
+
+        {selectedItem && (
+          <Modal
+            opened={showEditModal}
+            onClose={handleCancelCheckout}
+            title="Edit Entry"
+            size="lg"
+          >
+            <form onSubmit={handleCheckin}>
+              <Stack>
+                <Textarea
+                  label="Question"
+                  required
+                  value={editedItem.question}
+                  onChange={(e) => setEditedItem({ ...editedItem, question: e.target.value })}
+                />
+                <Textarea
+                  label="Answer"
+                  required
+                  value={editedItem.answer_key}
+                  onChange={(e) => setEditedItem({ ...editedItem, answer_key: e.target.value })}
+                />
+                <TextInput
+                  label="Category"
+                  required
+                  value={editedItem.category}
+                  onChange={(e) => setEditedItem({ ...editedItem, category: e.target.value })}
+                />
+                <TextInput
+                  label="Sub-category"
+                  value={editedItem.sub_category}
+                  onChange={(e) => setEditedItem({ ...editedItem, sub_category: e.target.value })}
+                />
+                <Textarea
+                  label="Compliance Answer"
+                  value={editedItem.compliance_answer}
+                  onChange={(e) => setEditedItem({ ...editedItem, compliance_answer: e.target.value })}
+                />
+                <Textarea
+                  label="Notes"
+                  value={editedItem.notes}
+                  onChange={(e) => setEditedItem({ ...editedItem, notes: e.target.value })}
+                />
+                <Group position="apart">
+                  <Button variant="light" color="red" onClick={handleCancelCheckout}>
+                    Cancel
+                  </Button>
+                  <Button type="submit">Save Changes</Button>
+                </Group>
+              </Stack>
+            </form>
+          </Modal>
+        )}
       </Stack>
     </Container>
   )

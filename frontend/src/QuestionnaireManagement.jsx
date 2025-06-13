@@ -3,162 +3,27 @@ import { Container, Title, Paper, Stack, Text, Button, FileInput, Select, Group,
 import { IconUpload, IconInfoCircle } from '@tabler/icons-react'
 
 function QuestionnaireManagement() {
-  // State management
   const [questionnaireFile, setQuestionnaireFile] = useState(null)
-  const [selectedEntity, setSelectedEntity] = useState('')
   const [isProcessing, setIsProcessing] = useState(false)
-  const [processingResults, setProcessingResults] = useState(null)
-  const [processStatus, setProcessStatus] = useState(null)
-  const [currentResults, setCurrentResults] = useState([])
-  const [processProgress, setProcessProgress] = useState({
-    current: 0,
-    total: 0,
-    phase: 'Preparing'
-  })
-  const [editedAnswers, setEditedAnswers] = useState({})
-  const [acceptedAnswers, setAcceptedAnswers] = useState({})
-
-  // Debug logging function
-  const logDebug = (type, message, data = null) => {
-    const logMessage = `[QuestionnaireManagement] ${type}: ${message}`
-    if (data) {
-      console.log(logMessage, data)
-    } else {
-      console.log(logMessage)
-    }
-  }
-
-  // Download CSV function as a component method
-  const downloadCsv = () => {
-    if (!processingResults) return;
-    
-    logDebug('Download', 'Current state:', { editedAnswers, acceptedAnswers });
-    
-    const processedResults = processingResults.map((result, index) => {
-      let answer = '';
-      
-      if (result.best_match) {
-        const hasLowConfidence = result.best_match.similarity < 0.5;
-        
-        logDebug('Processing', `Question ${index + 1}:`, {
-          hasLowConfidence,
-          isAccepted: acceptedAnswers[index],
-          editedAnswer: editedAnswers[index],
-          originalAnswer: result.best_match.answer_key
-        });
-
-        if (hasLowConfidence && acceptedAnswers[index] === true && editedAnswers[index]) {
-          answer = editedAnswers[index];
-          logDebug('Answer', `Using edited answer for question ${index + 1}:`, answer);
-        } else {
-          answer = result.best_match.answer_key;
-          logDebug('Answer', `Using original answer for question ${index + 1}:`, answer);
-        }
-      }
-
-      return {
-        question: result.input_question,
-        answer: answer,
-        confidence: result.best_match ? Math.round(result.best_match.similarity * 100) + '%' : '0%'
-      };
-    });
-
-    logDebug('Download', 'Final processed results:', processedResults);
-
-    const headers = ['Question', 'Answer', 'Confidence'];
-    const csvRows = [
-      headers.join(','),
-      ...processedResults.map(row => 
-        [
-          `"${row.question.replace(/"/g, '""')}"`,
-          `"${row.answer.replace(/"/g, '""')}"`,
-          row.confidence
-        ].join(',')
-      )
-    ];
-    const csvContent = csvRows.join('\n');
-
-    const blob = new Blob([csvContent], { type: 'text/csv' });
-    const url = window.URL.createObjectURL(blob);
-    const a = document.createElement('a');
-    a.href = url;
-    a.download = 'processed_questionnaire.csv';
-    document.body.appendChild(a);
-    a.click();
-    window.URL.revokeObjectURL(url);
-    document.body.removeChild(a);
-  };
+  const [processedQuestionnaires, setProcessedQuestionnaires] = useState([])
+  const [error, setError] = useState(null)
+  const [isLoading, setIsLoading] = useState(true)
+  const [showDownloadModal, setShowDownloadModal] = useState(false)
+  const [selectedQuestionnaire, setSelectedQuestionnaire] = useState(null)
 
   const handleProcessQuestionnaire = async () => {
-    if (!questionnaireFile) {
-      logDebug('Error', 'No file selected')
-      return
-    }
+    if (!questionnaireFile) return
 
-    const clientId = `process-${Date.now()}`
-    logDebug('Process', `Starting questionnaire processing with client ID: ${clientId}`)
-    
-    // Reset states
     setIsProcessing(true)
-    setProcessProgress({
-      current: 0,
-      total: 0,
-      phase: 'Preparing'
-    })
-    setProcessStatus(null)
-    setCurrentResults([])
-    setProcessingResults(null)
+    setError(null)
+
+    const formData = new FormData()
+    formData.append('file', questionnaireFile)
 
     try {
-      // Set up EventSource for progress updates
-      const eventSourceUrl = new URL('http://localhost:8000/questionnaire-progress')
-      eventSourceUrl.searchParams.append('client_id', clientId)
-      logDebug('Connection', `Setting up new process EventSource connection to: ${eventSourceUrl.toString()}`)
-
-      const eventSource = new EventSource(eventSourceUrl.toString())
-      
-      eventSource.onmessage = (event) => {
-        try {
-          const data = JSON.parse(event.data)
-          logDebug('Progress', 'Parsed progress data:', data)
-          
-          setProcessProgress({
-            current: data.current_entry,
-            total: data.total_entries,
-            phase: data.phase
-          })
-
-          if (data.processed_result) {
-            setCurrentResults(prev => [...prev, data.processed_result])
-          }
-
-          if (data.phase === 'Complete') {
-            eventSource.close()
-          }
-        } catch (error) {
-          logDebug('Error', 'Error parsing progress event:', error)
-        }
-      }
-
-      eventSource.onerror = () => {
-        eventSource.close()
-      }
-
-      // Start the questionnaire processing
-      logDebug('Process', 'Starting questionnaire processing...')
-      const formData = new FormData()
-      formData.append('file', questionnaireFile)
-
-      const url = new URL('http://localhost:8000/process-questionnaire')
-      url.searchParams.append('client_id', clientId)
-      if (selectedEntity) {
-        url.searchParams.append('entity', selectedEntity)
-      }
-
-      logDebug('Request', `Sending processing request to: ${url.toString()}`)
-      const response = await fetch(url.toString(), {
+      const response = await fetch('http://localhost:8000/process-questionnaire', {
         method: 'POST',
-        body: formData
+        body: formData,
       })
 
       if (!response.ok) {
@@ -167,55 +32,15 @@ function QuestionnaireManagement() {
       }
 
       const data = await response.json()
-      logDebug('Response', 'Processing completed successfully:', data)
-      
-      if (data.results) {
-        setProcessingResults(data.results)
-        setProcessStatus({
-          type: 'success',
-          message: `Processed ${data.results.length} questions successfully`
-        })
-        setCurrentResults(data.results)
-      }
+      setProcessedQuestionnaires(prevState => [data, ...prevState])
+      setQuestionnaireFile(null)
     } catch (error) {
-      logDebug('Error', 'Error processing questionnaire:', error)
-      setProcessStatus({
-        type: 'error',
-        message: error.message || 'Failed to process questionnaire. Please try again.'
-      })
+      console.error('Error processing questionnaire:', error)
+      setError(error.message || 'Failed to process questionnaire. Please try again.')
     } finally {
       setIsProcessing(false)
     }
   }
-
-  // Add handler for answer changes
-  const handleAnswerChange = (index, value) => {
-    setEditedAnswers(prev => ({
-      ...prev,
-      [index]: value
-    }));
-    // Clear accepted state when answer is edited
-    setAcceptedAnswers(prev => ({
-      ...prev,
-      [index]: false
-    }));
-  };
-
-  const handleAcceptAnswer = (index) => {
-    if (editedAnswers[index]) {
-      setAcceptedAnswers(prev => ({
-        ...prev,
-        [index]: true
-      }));
-    }
-  };
-
-  const handleEditAcceptedAnswer = (index) => {
-    setAcceptedAnswers(prev => ({
-      ...prev,
-      [index]: false
-    }));
-  };
 
   return (
     <Container size="xl">
@@ -242,17 +67,6 @@ function QuestionnaireManagement() {
                 accept=".csv"
                 value={questionnaireFile}
                 onChange={setQuestionnaireFile}
-              />
-              <Select
-                label={<Text size="sm" fw={600} c="#FFFFFF">Filter by Entity</Text>}
-                description={<Text c="#94A3B8" size="sm" component="span">Optionally limit matches to a specific entity</Text>}
-                placeholder="Select entity"
-                data={[
-                  { value: 'Mindbody', label: 'Mindbody' },
-                  { value: 'ClassPass', label: 'ClassPass' }
-                ]}
-                value={selectedEntity}
-                onChange={setSelectedEntity}
               />
               <Group position="right">
                 <Button
@@ -285,29 +99,29 @@ function QuestionnaireManagement() {
               </Paper>
             )}
 
-            {processStatus && !isProcessing && (
+            {error && (
               <Alert 
-                color={processStatus.type === 'success' ? 'green' : 'red'}
+                color="red"
                 styles={(theme) => ({
                   root: {
-                    backgroundColor: processStatus.type === 'success' ? theme.colors.green[5] : undefined,
+                    backgroundColor: theme.colors.red[5],
                   },
                   message: {
-                    color: processStatus.type === 'success' ? 'white' : undefined,
+                    color: 'white',
                     fontWeight: 700
                   }
                 })}
               >
-                {processStatus.message}
+                {error}
               </Alert>
             )}
           </Stack>
         </Paper>
 
-        {processingResults && processingResults.length > 0 && (
+        {processedQuestionnaires.length > 0 && (
           <Paper p={40} radius="lg" withBorder pos="relative" mt="xl">
             <Button 
-              onClick={downloadCsv}
+              onClick={() => setShowDownloadModal(true)}
               variant="light"
               style={{ position: 'absolute', top: '16px', right: '16px' }}
             >
@@ -316,7 +130,7 @@ function QuestionnaireManagement() {
             <Stack spacing="xl">
               <Title order={2} size={28}>Processed Results</Title>
               <Stack spacing="xl" mt={40}>
-                {processingResults.map((result, index) => (
+                {processedQuestionnaires.map((result, index) => (
                   <Paper 
                     key={index} 
                     p="md" 
@@ -355,10 +169,9 @@ function QuestionnaireManagement() {
                             <Text component="span" fw={700} c="dark">Answer: </Text>
                             <Group align="flex-start" spacing="sm">
                               <Textarea
-                                value={editedAnswers[index] || result.best_match.answer_key}
-                                onChange={(e) => handleAnswerChange(index, e.target.value)}
+                                value={result.best_match.answer_key}
                                 minRows={2}
-                                disabled={acceptedAnswers[index]}
+                                disabled
                                 style={{ flex: 1 }}
                                 styles={{
                                   input: {
@@ -367,24 +180,6 @@ function QuestionnaireManagement() {
                                   }
                                 }}
                               />
-                              {acceptedAnswers[index] ? (
-                                <Button
-                                  size="sm"
-                                  color="yellow"
-                                  onClick={() => handleEditAcceptedAnswer(index)}
-                                >
-                                  Edit
-                                </Button>
-                              ) : (
-                                <Button
-                                  size="sm"
-                                  color={acceptedAnswers[index] ? "green" : "blue"}
-                                  onClick={() => handleAcceptAnswer(index)}
-                                  disabled={acceptedAnswers[index] || !editedAnswers[index]}
-                                >
-                                  Accept
-                                </Button>
-                              )}
                             </Group>
                           </Stack>
                         ) : (
@@ -414,6 +209,33 @@ function QuestionnaireManagement() {
           </Paper>
         )}
       </Stack>
+
+      {showDownloadModal && (
+        <Paper p={40} radius="lg" withBorder pos="relative" mt="xl">
+          <Button 
+            onClick={() => setShowDownloadModal(false)}
+            variant="light"
+            style={{ position: 'absolute', top: '16px', right: '16px' }}
+          >
+            Close
+          </Button>
+          <Stack spacing="xl">
+            <Title order={2} size={28}>Download CSV</Title>
+            <Text size="lg" c="dimmed">
+              The processed questionnaire CSV file is ready for download.
+            </Text>
+            <Group position="right">
+              <Button
+                onClick={() => {
+                  // Implement CSV download logic here
+                }}
+              >
+                Download CSV
+              </Button>
+            </Group>
+          </Stack>
+        </Paper>
+      )}
     </Container>
   )
 }

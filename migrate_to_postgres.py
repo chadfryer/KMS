@@ -18,14 +18,14 @@ def connect_postgres():
 
 def create_postgres_tables(pg_conn):
     with pg_conn.cursor() as cur:
-        # Create questionnaires table
+        # Create questionnaires table if it doesn't exist (for fresh installations)
         cur.execute("""
             CREATE TABLE IF NOT EXISTS questionnaires (
                 id SERIAL PRIMARY KEY,
                 question TEXT NOT NULL,
                 answer_key TEXT NOT NULL,
-                entity TEXT,
                 comment TEXT,
+                entity TEXT,
                 created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
             )
         """)
@@ -40,7 +40,6 @@ def create_postgres_tables(pg_conn):
                 processed_count INTEGER DEFAULT 0,
                 success_rate INTEGER DEFAULT 0,
                 unaccepted_answers_count INTEGER DEFAULT 0,
-                entity VARCHAR(255),
                 error_message TEXT,
                 created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
                 downloaded BOOLEAN DEFAULT FALSE,
@@ -51,6 +50,69 @@ def create_postgres_tables(pg_conn):
             )
         """)
         
+        # Check if the comment column exists before trying to rename it
+        cur.execute("""
+            SELECT column_name 
+            FROM information_schema.columns 
+            WHERE table_name = 'questionnaires' AND column_name = 'comment'
+        """)
+        has_comment_column = cur.fetchone() is not None
+
+        if has_comment_column:
+            # Now update the questionnaires table schema
+            cur.execute("""
+                -- First rename the comment column to notes
+                ALTER TABLE questionnaires 
+                RENAME COLUMN comment TO notes;
+            """)
+        else:
+            # If comment column doesn't exist, check if notes column exists
+            cur.execute("""
+                SELECT column_name 
+                FROM information_schema.columns 
+                WHERE table_name = 'questionnaires' AND column_name = 'notes'
+            """)
+            has_notes_column = cur.fetchone() is not None
+
+            if not has_notes_column:
+                # Add notes column if it doesn't exist
+                cur.execute("""
+                    ALTER TABLE questionnaires 
+                    ADD COLUMN notes TEXT;
+                """)
+
+        # Add new columns
+        cur.execute("""
+            ALTER TABLE questionnaires 
+            ADD COLUMN IF NOT EXISTS category TEXT,
+            ADD COLUMN IF NOT EXISTS sub_category TEXT,
+            ADD COLUMN IF NOT EXISTS compliance_answer TEXT,
+            ADD COLUMN IF NOT EXISTS last_updated TIMESTAMP,
+            ADD COLUMN IF NOT EXISTS checked_out_by TEXT,
+            ADD COLUMN IF NOT EXISTS checked_out_at TIMESTAMP;
+        """)
+
+        # Check if entity column exists before trying to drop it
+        cur.execute("""
+            SELECT column_name 
+            FROM information_schema.columns 
+            WHERE table_name = 'questionnaires' AND column_name = 'entity'
+        """)
+        has_entity_column = cur.fetchone() is not None
+
+        if has_entity_column:
+            cur.execute("""
+                ALTER TABLE questionnaires 
+                DROP COLUMN entity;
+            """)
+
+        # Set initial last_updated values to created_at
+        cur.execute("""
+            UPDATE questionnaires 
+            SET last_updated = created_at 
+            WHERE last_updated IS NULL;
+        """)
+        
         pg_conn.commit()
 
 def migrate_questionnaires(sqlite_conn, pg_conn):
@@ -58,20 +120,20 @@ def migrate_questionnaires(sqlite_conn, pg_conn):
     sqlite_cur = sqlite_conn.cursor()
     pg_cur = pg_conn.cursor()
     
-    # Get data from SQLite
-    sqlite_cur.execute("SELECT id, question, answer_key, entity, comment, created_at FROM questionnaires")
+    # Get data from SQLite - note we're using 'comment' instead of 'notes'
+    sqlite_cur.execute("SELECT id, question, answer_key, comment, created_at FROM questionnaires")
     rows = sqlite_cur.fetchall()
     
     if rows:
-        # Insert into PostgreSQL
+        # Insert into PostgreSQL - modified to match new schema
         execute_values(
             pg_cur,
             """
-            INSERT INTO questionnaires (id, question, answer_key, entity, comment, created_at)
+            INSERT INTO questionnaires (id, question, answer_key, notes, created_at)
             VALUES %s
             """,
             rows,
-            template="(%s, %s, %s, %s, %s, %s)"
+            template="(%s, %s, %s, %s, %s)"
         )
         
         # Reset the sequence to the max id
@@ -87,10 +149,10 @@ def migrate_processed_questionnaires(sqlite_conn, pg_conn):
     sqlite_cur = sqlite_conn.cursor()
     pg_cur = pg_conn.cursor()
     
-    # Get data from SQLite
+    # Get data from SQLite - removed entity from selection
     sqlite_cur.execute("""
         SELECT id, filename, status, questions_count, processed_count, 
-               success_rate, unaccepted_answers_count, entity, error_message,
+               success_rate, unaccepted_answers_count, error_message,
                created_at, downloaded, can_download, csv_content,
                low_confidence_answers, edited_answers
         FROM processed_questionnaires
@@ -98,20 +160,30 @@ def migrate_processed_questionnaires(sqlite_conn, pg_conn):
     rows = sqlite_cur.fetchall()
     
     if rows:
-        # Insert into PostgreSQL
+        # Convert rows to list to modify boolean values
+        modified_rows = []
+        for row in rows:
+            # Convert row to list
+            row_list = list(row)
+            # Convert downloaded (index 9) and can_download (index 10) from 0/1 to boolean
+            row_list[9] = bool(row_list[9])
+            row_list[10] = bool(row_list[10])
+            modified_rows.append(tuple(row_list))
+        
+        # Insert into PostgreSQL - modified to match new schema
         execute_values(
             pg_cur,
             """
             INSERT INTO processed_questionnaires (
                 id, filename, status, questions_count, processed_count,
-                success_rate, unaccepted_answers_count, entity, error_message,
+                success_rate, unaccepted_answers_count, error_message,
                 created_at, downloaded, can_download, csv_content,
                 low_confidence_answers, edited_answers
             )
             VALUES %s
             """,
-            rows,
-            template="(%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)"
+            modified_rows,
+            template="(%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)"
         )
         
         # Reset the sequence to the max id

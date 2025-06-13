@@ -8,7 +8,10 @@ function KnowledgeBaseUpload() {
   const [uploadStatus, setUploadStatus] = useState(null)
   const [newQuestion, setNewQuestion] = useState('')
   const [newAnswerKey, setNewAnswerKey] = useState('')
-  const [newEntity, setNewEntity] = useState('')
+  const [newCategory, setNewCategory] = useState('')
+  const [newSubCategory, setNewSubCategory] = useState('')
+  const [newComplianceAnswer, setNewComplianceAnswer] = useState('')
+  const [newNotes, setNewNotes] = useState('')
   const [showPopup, setShowPopup] = useState(false)
   const [similarQuestions, setSimilarQuestions] = useState([])
   const [currentIndex, setCurrentIndex] = useState(0)
@@ -25,7 +28,10 @@ function KnowledgeBaseUpload() {
       const formData = new FormData()
       formData.append('question', newQuestion)
       formData.append('answer_key', newAnswerKey)
-      formData.append('entity', newEntity)
+      formData.append('category', newCategory)
+      formData.append('sub_category', newSubCategory)
+      formData.append('compliance_answer', newComplianceAnswer)
+      formData.append('notes', newNotes)
 
       const response = await fetch('http://localhost:8000/add', {
         method: 'POST',
@@ -37,7 +43,10 @@ function KnowledgeBaseUpload() {
       if (response.ok) {
         setNewQuestion('')
         setNewAnswerKey('')
-        setNewEntity('')
+        setNewCategory('')
+        setNewSubCategory('')
+        setNewComplianceAnswer('')
+        setNewNotes('')
         setUploadStatus({
           type: 'success',
           message: 'Question-answer pair added successfully'
@@ -46,7 +55,10 @@ function KnowledgeBaseUpload() {
         setSimilarQuestions([{
           new_question: newQuestion,
           new_answer: newAnswerKey,
-          new_entity: newEntity,
+          new_category: newCategory,
+          new_sub_category: newSubCategory,
+          new_compliance_answer: newComplianceAnswer,
+          new_notes: newNotes,
           similar_to: data.similar_question,
           similarity: data.similarity
         }])
@@ -131,7 +143,10 @@ function KnowledgeBaseUpload() {
       const formData = new FormData()
       formData.append('question', keepNew ? currentQuestion.new_question : currentQuestion.similar_to.question)
       formData.append('answer_key', keepNew ? currentQuestion.new_answer : currentQuestion.similar_to.answer_key)
-      formData.append('entity', keepNew ? currentQuestion.new_entity : currentQuestion.similar_to.entity)
+      formData.append('category', keepNew ? currentQuestion.new_category : currentQuestion.similar_to.category)
+      formData.append('sub_category', keepNew ? currentQuestion.new_sub_category : currentQuestion.similar_to.sub_category)
+      formData.append('compliance_answer', keepNew ? currentQuestion.new_compliance_answer : currentQuestion.similar_to.compliance_answer)
+      formData.append('notes', keepNew ? currentQuestion.new_notes : currentQuestion.similar_to.notes)
       
       if (!keepNew) {
         formData.append('replace_id', currentQuestion.similar_to.id)
@@ -203,7 +218,10 @@ function KnowledgeBaseUpload() {
           const formData = new FormData();
           formData.append('question', currentQuestion.similar_to.question);
           formData.append('answer_key', currentQuestion.similar_to.answer_key);
-          formData.append('entity', currentQuestion.similar_to.entity);
+          formData.append('category', currentQuestion.similar_to.category);
+          formData.append('sub_category', currentQuestion.similar_to.sub_category);
+          formData.append('compliance_answer', currentQuestion.similar_to.compliance_answer);
+          formData.append('notes', currentQuestion.similar_to.notes);
           formData.append('replace_id', currentQuestion.similar_to.id);
 
           const response = await fetch('http://localhost:8000/resolve-similar', {
@@ -282,7 +300,7 @@ function KnowledgeBaseUpload() {
             <Stack>
               <FileInput
                 label={<Text c="#FFFFFF" fw={700}>Select CSV File</Text>}
-                description={<Text c="dimmed" size="sm" component="span">Upload a CSV file containing questions and answers (columns: question, answer_key, entity).</Text>}
+                description={<Text c="dimmed" size="sm" component="span">Upload a CSV file containing questions and answers (columns: question, answer_key, category, sub_category, compliance_answer, notes).</Text>}
                 placeholder="Click to select file"
                 accept=".csv"
                 value={selectedFile}
@@ -361,16 +379,70 @@ function KnowledgeBaseUpload() {
                 <TextInput
                   label={
                     <Text c="#FFFFFF" style={{ display: 'inline' }} fw={700}>
-                      Entity<Text component="span" c="red" ml={0}>*</Text>
+                      Category<Text component="span" c="red" ml={0}>*</Text>
                     </Text>
                   }
-                  description={<Box component="span" c="dimmed" style={{ fontSize: '14px' }}>Specify the entity or category to which this Q&A belongs.</Box>}
-                  placeholder="e.g., Mindbody, ClassPass"
-                  value={newEntity}
-                  onChange={(e) => setNewEntity(e.target.value)}
+                  description={<Box component="span" c="dimmed" style={{ fontSize: '14px' }}>Specify the main category this Q&A belongs to.</Box>}
+                  placeholder="e.g., Scheduling, Billing, Compliance"
+                  value={newCategory}
+                  onChange={(e) => setNewCategory(e.target.value)}
                   styles={{
                     input: {
                       color: '#000000'
+                    }
+                  }}
+                />
+                <TextInput
+                  label={
+                    <Text c="#FFFFFF" style={{ display: 'inline' }} fw={700}>
+                      Sub-category
+                    </Text>
+                  }
+                  description={<Box component="span" c="dimmed" style={{ fontSize: '14px' }}>Specify a more specific sub-category if applicable.</Box>}
+                  placeholder="e.g., Class Registration, Payment Processing"
+                  value={newSubCategory}
+                  onChange={(e) => setNewSubCategory(e.target.value)}
+                  styles={{
+                    input: {
+                      color: '#000000'
+                    }
+                  }}
+                />
+                <Textarea
+                  label={
+                    <Text c="#FFFFFF" style={{ display: 'inline' }} fw={700}>
+                      Compliance Answer
+                    </Text>
+                  }
+                  description={<Box component="span" c="dimmed" style={{ fontSize: '14px' }}>If this is a compliance-related question, provide the official compliance answer.</Box>}
+                  placeholder="e.g., According to regulation XYZ..."
+                  value={newComplianceAnswer}
+                  onChange={(e) => setNewComplianceAnswer(e.target.value)}
+                  minRows={2}
+                  styles={{
+                    input: {
+                      color: '#000000',
+                      fontSize: '16px',
+                      lineHeight: 1.6
+                    }
+                  }}
+                />
+                <Textarea
+                  label={
+                    <Text c="#FFFFFF" style={{ display: 'inline' }} fw={700}>
+                      Notes
+                    </Text>
+                  }
+                  description={<Box component="span" c="dimmed" style={{ fontSize: '14px' }}>Add any additional notes or context about this Q&A.</Box>}
+                  placeholder="e.g., This policy was updated on..."
+                  value={newNotes}
+                  onChange={(e) => setNewNotes(e.target.value)}
+                  minRows={2}
+                  styles={{
+                    input: {
+                      color: '#000000',
+                      fontSize: '16px',
+                      lineHeight: 1.6
                     }
                   }}
                 />
@@ -461,10 +533,24 @@ function KnowledgeBaseUpload() {
                   <Text>{similarQuestions[currentIndex].new_question}</Text>
                   <Text size="lg" fw={700}>Answer</Text>
                   <Text>{similarQuestions[currentIndex].new_answer}</Text>
-                  {similarQuestions[currentIndex].new_entity && (
+                  <Text size="lg" fw={700}>Category</Text>
+                  <Text>{similarQuestions[currentIndex].new_category}</Text>
+                  {similarQuestions[currentIndex].new_sub_category && (
                     <>
-                      <Text size="lg" fw={700}>Entity</Text>
-                      <Text>{similarQuestions[currentIndex].new_entity}</Text>
+                      <Text size="lg" fw={700}>Sub-category</Text>
+                      <Text>{similarQuestions[currentIndex].new_sub_category}</Text>
+                    </>
+                  )}
+                  {similarQuestions[currentIndex].new_compliance_answer && (
+                    <>
+                      <Text size="lg" fw={700}>Compliance Answer</Text>
+                      <Text>{similarQuestions[currentIndex].new_compliance_answer}</Text>
+                    </>
+                  )}
+                  {similarQuestions[currentIndex].new_notes && (
+                    <>
+                      <Text size="lg" fw={700}>Notes</Text>
+                      <Text>{similarQuestions[currentIndex].new_notes}</Text>
                     </>
                   )}
                 </Stack>
@@ -474,36 +560,39 @@ function KnowledgeBaseUpload() {
                 <Stack spacing="sm">
                   <Group position="apart">
                     <Text size="lg" fw={700}>Similar Existing Question</Text>
-                    <Badge 
-                      color={(() => {
-                        const similarity = similarQuestions[currentIndex].similarity * 100;
-                        if (similarity >= 90) return 'green';
-                        if (similarity >= 80) return 'teal';
-                        if (similarity >= 70) return 'lime';
-                        if (similarity >= 60) return 'yellow';
-                        if (similarity >= 50) return 'orange';
-                        if (similarity >= 40) return 'red';
-                        return 'red';
-                      })()}
-                      variant={(() => {
-                        const similarity = similarQuestions[currentIndex].similarity * 100;
-                        if (similarity >= 80) return 'filled';
-                        if (similarity >= 50) return 'light';
-                        return 'outline';
-                      })()}
-                    >
-                      {Math.round(similarQuestions[currentIndex].similarity * 100)}% Similar
-                    </Badge>
+                    <Badge color="yellow">Similarity: {(similarQuestions[currentIndex].similarity * 100).toFixed(1)}%</Badge>
                   </Group>
                   <Text>{similarQuestions[currentIndex].similar_to.question}</Text>
                   <Text size="lg" fw={700}>Answer</Text>
                   <Text>{similarQuestions[currentIndex].similar_to.answer_key}</Text>
-                  {similarQuestions[currentIndex].similar_to.entity && (
+                  <Text size="lg" fw={700}>Category</Text>
+                  <Text>{similarQuestions[currentIndex].similar_to.category}</Text>
+                  {similarQuestions[currentIndex].similar_to.sub_category && (
                     <>
-                      <Text size="lg" fw={700}>Entity</Text>
-                      <Text>{similarQuestions[currentIndex].similar_to.entity}</Text>
+                      <Text size="lg" fw={700}>Sub-category</Text>
+                      <Text>{similarQuestions[currentIndex].similar_to.sub_category}</Text>
                     </>
                   )}
+                  {similarQuestions[currentIndex].similar_to.compliance_answer && (
+                    <>
+                      <Text size="lg" fw={700}>Compliance Answer</Text>
+                      <Text>{similarQuestions[currentIndex].similar_to.compliance_answer}</Text>
+                    </>
+                  )}
+                  {similarQuestions[currentIndex].similar_to.notes && (
+                    <>
+                      <Text size="lg" fw={700}>Notes</Text>
+                      <Text>{similarQuestions[currentIndex].similar_to.notes}</Text>
+                    </>
+                  )}
+                  <Group spacing={4}>
+                    <Text size="sm" c="dimmed">Created:</Text>
+                    <Text size="sm" c="dimmed">{formatDate(similarQuestions[currentIndex].similar_to.created_at)}</Text>
+                  </Group>
+                  <Group spacing={4}>
+                    <Text size="sm" c="dimmed">Last Updated:</Text>
+                    <Text size="sm" c="dimmed">{formatDate(similarQuestions[currentIndex].similar_to.last_updated)}</Text>
+                  </Group>
                 </Stack>
               </Paper>
 

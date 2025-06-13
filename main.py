@@ -55,18 +55,28 @@ class Questionnaire(Base):
         id (int): Primary key
         question (str): The question text
         answer_key (str): The answer to the question
-        entity (str): The entity or system the question relates to
-        comment (str, optional): Additional comments or context
+        category (str): The main category of the question
+        sub_category (str): The sub-category of the question
+        compliance_answer (str): The official compliance answer if applicable
+        notes (str): Additional notes or context
         created_at (datetime): Timestamp of when the entry was created
+        last_updated (datetime): Timestamp of when the entry was last modified
+        checked_out_by (str): Username of the person checking out the questionnaire
+        checked_out_at (datetime): Timestamp of when the questionnaire was checked out
     """
     __tablename__ = "questionnaires"
 
     id = Column(Integer, primary_key=True, index=True)
     question = Column(Text, nullable=False)
     answer_key = Column(Text, nullable=False)
-    entity = Column(Text, nullable=True)
-    comment = Column(Text, nullable=True)
+    category = Column(Text, nullable=True)
+    sub_category = Column(Text, nullable=True)
+    compliance_answer = Column(Text, nullable=True)
+    notes = Column(Text, nullable=True)
     created_at = Column(DateTime, default=datetime.utcnow, nullable=False)
+    last_updated = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow, nullable=False)
+    checked_out_by = Column(Text, nullable=True)
+    checked_out_at = Column(DateTime, nullable=True)
 
     def to_dict(self):
         """
@@ -79,10 +89,23 @@ class Questionnaire(Base):
             "id": self.id,
             "question": self.question,
             "answer_key": self.answer_key,
-            "entity": self.entity,
-            "comment": self.comment,
-            "created_at": self.created_at.isoformat() if self.created_at else None
+            "category": self.category,
+            "sub_category": self.sub_category,
+            "compliance_answer": self.compliance_answer,
+            "notes": self.notes,
+            "created_at": self.created_at.isoformat() if self.created_at else None,
+            "last_updated": self.last_updated.isoformat() if self.last_updated else None,
+            "checked_out_by": self.checked_out_by,
+            "checked_out_at": self.checked_out_at.isoformat() if self.checked_out_at else None
         }
+
+    def is_checked_out(self):
+        """Check if the entry is currently checked out."""
+        if not self.checked_out_at or not self.checked_out_by:
+            return False
+        # Consider checkouts older than 4 hours as expired
+        checkout_expiry = timedelta(hours=4)
+        return datetime.utcnow() - self.checked_out_at < checkout_expiry
 
 class ProcessedQuestionnaire(Base):
     """
@@ -225,35 +248,33 @@ def similar(a: str, b: str) -> float:
     # Combine word overlap and sequence similarity
     return (overlap / total + sequence_similarity) / 2
 
-def find_similar_question(db, question: str, entity: str = None, threshold: float = 0.6):
+def find_similar_question(db, question: str, threshold: float = 0.6):
     """
-    Find similar questions in the database with a similarity threshold.
-    Only considers questions as similar if they have both similar text AND the same entity (if entity is provided).
+    Find similar questions in the database.
     
     Args:
         db: Database session
-        question (str): Question to find similar matches for
-        entity (str, optional): Entity to match against
-        threshold (float): Minimum similarity ratio (default: 0.6)
+        question (str): The question to compare against
+        threshold (float): Similarity threshold (0-1)
         
     Returns:
-        Questionnaire or None: Matching question if found, None otherwise
+        Questionnaire: Most similar question if found and above threshold, None otherwise
     """
-    all_questions = db.query(Questionnaire).all()
-    best_match = None
-    best_similarity = threshold
+    questions = db.query(Questionnaire).all()
+    max_ratio = 0
+    most_similar = None
     
-    for q in all_questions:
-        # If entity is provided, only check questions with matching entity
-        if entity and q.entity != entity:
-            continue
-            
-        similarity = similar(question, q.question)
-        if similarity > best_similarity:
-            best_similarity = similarity
-            best_match = q
+    for q in questions:
+        ratio = similar(question.lower(), q.question.lower())
+        if ratio > max_ratio:
+            max_ratio = ratio
+            most_similar = q
     
-    return best_match
+    if max_ratio >= threshold:
+        global similar_ratio
+        similar_ratio = max_ratio
+        return most_similar
+    return None
 
 @app.get("/questions")
 async def get_questions():
@@ -277,46 +298,55 @@ async def get_questions():
         db.close()
 
 @app.post("/add")
-async def add_questionnaire(question: str = Form(...), answer_key: str = Form(...), entity: str = Form(None)):
+async def add_questionnaire(
+    question: str = Form(...), 
+    answer_key: str = Form(...), 
+    category: str = Form(None),
+    sub_category: str = Form(None),
+    compliance_answer: str = Form(None),
+    notes: str = Form(None)
+):
     """
-    Add a new question-answer pair to the database.
+    Add a new questionnaire entry to the database.
     
     Args:
         question (str): The question text
         answer_key (str): The answer to the question
-        entity (str, optional): The entity or system the question relates to
+        category (str, optional): The main category
+        sub_category (str, optional): The sub-category
+        compliance_answer (str, optional): The compliance answer
+        notes (str, optional): Additional notes
         
     Returns:
-        dict: Success response or error message
+        dict: The newly created questionnaire entry or similar questions if found
     """
     db = SessionLocal()
     try:
-        # Check for similar questions (only within same entity)
-        similar_q = find_similar_question(db, question, entity)
-        if similar_q:
+        # Check for similar questions
+        similar = find_similar_question(db, question)
+        if similar:
             return JSONResponse(
-                status_code=400,
+                status_code=409,
                 content={
-                    "message": "A similar question already exists for this entity",
-                    "similar_question": similar_q.to_dict()
+                    "message": "Similar question found",
+                    "similar_question": similar.to_dict(),
+                    "similarity": similar_ratio
                 }
             )
         
+        # Create new questionnaire entry
         new_questionnaire = Questionnaire(
             question=question,
             answer_key=answer_key,
-            entity=entity
+            category=category,
+            sub_category=sub_category,
+            compliance_answer=compliance_answer,
+            notes=notes
         )
         db.add(new_questionnaire)
         db.commit()
         db.refresh(new_questionnaire)
         return new_questionnaire.to_dict()
-    except Exception as e:
-        db.rollback()
-        return JSONResponse(
-            status_code=500,
-            content={"message": f"Error adding questionnaire: {str(e)}"}
-        )
     finally:
         db.close()
 
@@ -384,168 +414,113 @@ async def upload_csv(
     request: Request = None
 ):
     """
-    Upload and process CSV files containing questions and answers.
-    Tracks progress of processing each entry.
-    Returns similar questions when similarity > 80% for user choice.
-    """
-    client_id = request.headers.get('x-client-id') or str(id(request))
-    if client_id not in progress_queues:
-        progress_queues[client_id] = Queue()
+    Upload and process a CSV file containing questions and answers.
     
+    The CSV should have the following columns:
+    - question: The question text
+    - answer_key: The answer to the question
+    - category: The main category (optional)
+    - sub_category: The sub-category (optional)
+    - compliance_answer: The compliance answer (optional)
+    - notes: Additional notes (optional)
+    
+    Args:
+        file: List of CSV files to process
+        request: FastAPI request object
+        
+    Returns:
+        dict: Processing status and results
+    """
     if not file:
         return JSONResponse(
             status_code=400,
             content={"message": "No file uploaded"}
         )
-    
-    total_imported = 0
-    total_duplicates = 0
+
     results = []
-    similar_questions = []
+    total_questions = 0
     
-    for uploaded_file in file:
-        if not uploaded_file.filename.endswith('.csv'):
-            return JSONResponse(
-                status_code=400,
-                content={"message": f"File {uploaded_file.filename} is not a CSV file"}
-            )
-        
+    for upload_file in file:
         try:
-            content = await uploaded_file.read()
-            content_str = None
+            # Read CSV content
+            content = await upload_file.read()
+            text_content = content.decode()
+            csv_reader = csv.DictReader(io.StringIO(text_content))
             
-            # Try different encodings
-            for encoding in ['utf-8-sig', 'utf-8', 'latin1']:
-                try:
-                    content_str = content.decode(encoding)
-                    break
-                except UnicodeDecodeError:
-                    continue
+            # Validate CSV structure
+            required_fields = ['question', 'answer_key']
+            optional_fields = ['category', 'sub_category', 'compliance_answer', 'notes']
+            headers = csv_reader.fieldnames
             
-            if not content_str:
-                return JSONResponse(
-                    status_code=400,
-                    content={"message": f"Could not decode file {uploaded_file.filename}"}
-                )
-            
-            # Parse CSV
-            csv_file = io.StringIO(content_str)
-            reader = csv.DictReader(csv_file)
-            
-            # Get field mapping
-            headers = reader.fieldnames
             if not headers:
                 return JSONResponse(
                     status_code=400,
-                    content={"message": "CSV file has no headers"}
+                    content={"message": "CSV file is empty or invalid"}
                 )
             
-            field_mapping = {}
-            for header in headers:
-                header_lower = header.lower()
-                if 'question' in header_lower:
-                    field_mapping['question'] = header
-                elif any(key in header_lower for key in ['answer', 'response']):
-                    field_mapping['answer_key'] = header
-                elif 'entity' in header_lower:
-                    field_mapping['entity'] = header
-                elif 'comment' in header_lower:
-                    field_mapping['comment'] = header
-            
-            if 'question' not in field_mapping:
+            missing_fields = [field for field in required_fields if field not in headers]
+            if missing_fields:
                 return JSONResponse(
                     status_code=400,
-                    content={"message": "CSV must contain a question column"}
+                    content={"message": f"Missing required columns: {', '.join(missing_fields)}"}
                 )
             
-            # Count total entries
-            csv_file.seek(0)
-            total_entries = sum(1 for _ in csv.DictReader(io.StringIO(content_str)))
-            
-            # Send initial progress
-            await send_progress_update(client_id, 0, total_entries, "Preparing")
-            
-            # Reset file pointer and skip header
-            csv_file.seek(0)
-            reader = csv.DictReader(csv_file)
-            
+            # Process each row
             db = SessionLocal()
-            questionnaires = []
-            
             try:
-                for i, row in enumerate(reader, 1):
-                    # Update progress
-                    await send_progress_update(client_id, i, total_entries, "Reading File")
-                    
-                    # Create a new dict with normalized keys
-                    normalized_row = {}
-                    for norm_key, orig_key in field_mapping.items():
-                        if orig_key in row:
-                            normalized_row[norm_key] = row[orig_key].strip() if isinstance(row[orig_key], str) else row[orig_key]
-                    
-                    question = normalized_row.get('question', '')
-                    answer_key = normalized_row.get('answer_key', '')
-                    entity = normalized_row.get('entity', '')
-                    comment = normalized_row.get('comment', '')
-                    
-                    if not question or not answer_key:
-                        continue
+                file_results = []
+                questions_processed = 0
+                
+                for row in csv_reader:
+                    questions_processed += 1
+                    total_questions += 1
                     
                     # Check for similar questions
-                    similar_q = find_similar_question(db, question, entity, threshold=0.8)
+                    similar_q = find_similar_question(db, row['question'])
                     if similar_q:
-                        similar_questions.append({
-                            "new_question": question,
-                            "new_answer": answer_key,
-                            "new_entity": entity,
+                        file_results.append({
+                            "new_question": row['question'],
+                            "new_answer": row['answer_key'],
+                            "new_category": row.get('category'),
+                            "new_sub_category": row.get('sub_category'),
+                            "new_compliance_answer": row.get('compliance_answer'),
+                            "new_notes": row.get('notes'),
                             "similar_to": similar_q.to_dict(),
-                            "similarity": similar(question, similar_q.question)
+                            "similarity": similar_ratio
                         })
-                        total_duplicates += 1
                         continue
                     
+                    # Add new question if no similar ones found
                     new_questionnaire = Questionnaire(
-                        question=question,
-                        answer_key=answer_key,
-                        entity=entity if entity else None,
-                        comment=comment if comment else None
+                        question=row['question'],
+                        answer_key=row['answer_key'],
+                        category=row.get('category'),
+                        sub_category=row.get('sub_category'),
+                        compliance_answer=row.get('compliance_answer'),
+                        notes=row.get('notes')
                     )
                     db.add(new_questionnaire)
-                    questionnaires.append(new_questionnaire)
-                    
-                    # Small delay to prevent overwhelming the event stream
-                    await asyncio.sleep(0.01)
                 
                 db.commit()
-                for q in questionnaires:
-                    db.refresh(q)
-                
-                imported_count = len(questionnaires)
-                total_imported += imported_count
-                
-                result = {
-                    "filename": uploaded_file.filename,
-                    "imported": imported_count,
-                    "similar_questions": similar_questions
-                }
-                results.append(result)
-                
+                results.append({
+                    "filename": upload_file.filename,
+                    "questions_processed": questions_processed,
+                    "similar_questions": file_results
+                })
+            
             finally:
                 db.close()
-                
+        
         except Exception as e:
-            # Signal end of progress updates
-            await send_progress_update(client_id, 0, 0, "Error")
+            print(f"Error processing CSV file: {str(e)}")
             return JSONResponse(
                 status_code=500,
-                content={"message": f"Error processing file {uploaded_file.filename}: {str(e)}"}
+                content={"message": f"Error processing CSV file: {str(e)}"}
             )
     
-    # Signal end of progress updates
-    await send_progress_update(client_id, 0, 0, "Complete")
-    
     return {
-        "message": f"Successfully imported {total_imported} questions. Found {total_duplicates} similar questions.",
+        "message": "Files processed successfully",
+        "total_questions": total_questions,
         "results": results
     }
 
@@ -553,46 +528,63 @@ async def upload_csv(
 async def resolve_similar(
     question: str = Form(...),
     answer_key: str = Form(...),
-    entity: str = Form(None),
-    comment: str = Form(None),
+    category: str = Form(None),
+    sub_category: str = Form(None),
+    compliance_answer: str = Form(None),
+    notes: str = Form(None),
     replace_id: int = Form(None)
 ):
     """
-    Resolve a similar question by either:
-    1. Adding the new question if replace_id is not provided
-    2. Replacing the existing question if replace_id is provided
+    Resolve a similar question conflict by either keeping the existing one or adding the new one.
+    
+    Args:
+        question (str): The question text
+        answer_key (str): The answer to the question
+        category (str, optional): The main category
+        sub_category (str, optional): The sub-category
+        compliance_answer (str, optional): The compliance answer
+        notes (str, optional): Additional notes
+        replace_id (int, optional): ID of the existing question to replace
+        
+    Returns:
+        dict: The resolved questionnaire entry
     """
     db = SessionLocal()
     try:
         if replace_id:
-            # Replace existing question
+            # Update existing question
             existing = db.query(Questionnaire).filter(Questionnaire.id == replace_id).first()
             if existing:
                 existing.question = question
                 existing.answer_key = answer_key
-                existing.entity = entity
-                existing.comment = comment
+                existing.category = category
+                existing.sub_category = sub_category
+                existing.compliance_answer = compliance_answer
+                existing.notes = notes
+                existing.last_updated = datetime.utcnow()  # Explicitly update the timestamp
                 db.commit()
+                db.refresh(existing)
                 return existing.to_dict()
-        
-        # Add new question
-        new_questionnaire = Questionnaire(
-            question=question,
-            answer_key=answer_key,
-            entity=entity,
-            comment=comment
-        )
-        db.add(new_questionnaire)
-        db.commit()
-        db.refresh(new_questionnaire)
-        return new_questionnaire.to_dict()
-    
-    except Exception as e:
-        db.rollback()
-        return JSONResponse(
-            status_code=500,
-            content={"message": f"Error resolving similar question: {str(e)}"}
-        )
+            else:
+                return JSONResponse(
+                    status_code=404,
+                    content={"message": "Question not found"}
+                )
+        else:
+            # Add new question
+            new_questionnaire = Questionnaire(
+                question=question,
+                answer_key=answer_key,
+                category=category,
+                sub_category=sub_category,
+                compliance_answer=compliance_answer,
+                notes=notes,
+                last_updated=datetime.utcnow()  # Set initial last_updated
+            )
+            db.add(new_questionnaire)
+            db.commit()
+            db.refresh(new_questionnaire)
+            return new_questionnaire.to_dict()
     finally:
         db.close()
 
@@ -862,59 +854,38 @@ async def process_questionnaire(
         )
 
 @app.get("/search")
-async def search_questions(query: str, entity: str = None):
+async def search_questions(query: str, category: str = None):
     """
-    Search for questions in the knowledge base.
+    Search for questions in the database.
     
     Args:
-        query (str): Search terms to look for
-        entity (str, optional): Entity to filter results by
+        query (str): The search query
+        category (str, optional): Filter by category
         
     Returns:
-        dict: List of matching questions and answers
+        list: List of matching questionnaire entries
     """
-    if not query:
-        return JSONResponse(
-            status_code=400,
-            content={"message": "Search query is required"}
-        )
-    
+    db = SessionLocal()
     try:
-        db = SessionLocal()
-        search_terms = query.lower().split()
+        # Base query
+        search = db.query(Questionnaire)
         
-        # Start with base query
-        questions_query = db.query(Questionnaire)
+        # Apply search filters
+        if query:
+            search = search.filter(
+                (Questionnaire.question.ilike(f"%{query}%")) |
+                (Questionnaire.answer_key.ilike(f"%{query}%")) |
+                (Questionnaire.compliance_answer.ilike(f"%{query}%")) |
+                (Questionnaire.notes.ilike(f"%{query}%"))
+            )
         
-        # Apply entity filter if specified
-        if entity and entity.strip():
-            questions_query = questions_query.filter(Questionnaire.entity == entity)
+        # Apply category filter if provided
+        if category:
+            search = search.filter(Questionnaire.category == category)
         
-        all_questions = questions_query.all()
-        
-        results = []
-        for q in all_questions:
-            question_text = q.question.lower()
-            answer_text = q.answer_key.lower() if q.answer_key else ""
-            comment_text = q.comment.lower() if q.comment else ""
-            
-            if any(term in question_text or term in answer_text or term in comment_text 
-                  for term in search_terms):
-                results.append({
-                    "question": q.question,
-                    "answer_key": q.answer_key,
-                    "entity": q.entity,
-                    "comment": q.comment,
-                    "created_at": q.created_at.isoformat() if q.created_at else None
-                })
-        
+        # Execute query and convert results to dict
+        results = [q.to_dict() for q in search.all()]
         return {"results": results}
-    except Exception as e:
-        print(f"Error searching questions: {str(e)}")
-        return JSONResponse(
-            status_code=500,
-            content={"message": f"Error searching questions: {str(e)}"}
-        )
     finally:
         db.close()
 
@@ -1645,6 +1616,146 @@ async def clear_knowledge_base():
             status_code=500,
             content={"message": f"Error clearing knowledge base: {str(e)}"}
         )
+    finally:
+        db.close()
+
+@app.post("/questionnaires/{questionnaire_id}/checkout")
+async def checkout_questionnaire(
+    questionnaire_id: int,
+    user: str = Form(...),
+):
+    """
+    Checkout a questionnaire entry for editing.
+    
+    Args:
+        questionnaire_id (int): ID of the questionnaire to checkout
+        user (str): Username of the person checking out
+        
+    Returns:
+        dict: Updated questionnaire entry
+    """
+    db = SessionLocal()
+    try:
+        questionnaire = db.query(Questionnaire).filter(Questionnaire.id == questionnaire_id).first()
+        if not questionnaire:
+            return JSONResponse(
+                status_code=404,
+                content={"message": "Questionnaire not found"}
+            )
+        
+        if questionnaire.is_checked_out():
+            if questionnaire.checked_out_by != user:
+                return JSONResponse(
+                    status_code=409,
+                    content={
+                        "message": "Questionnaire is already checked out",
+                        "checked_out_by": questionnaire.checked_out_by,
+                        "checked_out_at": questionnaire.checked_out_at.isoformat()
+                    }
+                )
+        
+        questionnaire.checked_out_by = user
+        questionnaire.checked_out_at = datetime.utcnow()
+        db.commit()
+        db.refresh(questionnaire)
+        return questionnaire.to_dict()
+    finally:
+        db.close()
+
+@app.post("/questionnaires/{questionnaire_id}/checkin")
+async def checkin_questionnaire(
+    questionnaire_id: int,
+    user: str = Form(...),
+    question: str = Form(...),
+    answer_key: str = Form(...),
+    category: str = Form(None),
+    sub_category: str = Form(None),
+    compliance_answer: str = Form(None),
+    notes: str = Form(None)
+):
+    """
+    Check in a questionnaire entry after editing.
+    
+    Args:
+        questionnaire_id (int): ID of the questionnaire to check in
+        user (str): Username of the person checking in
+        question (str): Updated question text
+        answer_key (str): Updated answer text
+        category (str, optional): Updated category
+        sub_category (str, optional): Updated sub-category
+        compliance_answer (str, optional): Updated compliance answer
+        notes (str, optional): Updated notes
+        
+    Returns:
+        dict: Updated questionnaire entry
+    """
+    db = SessionLocal()
+    try:
+        questionnaire = db.query(Questionnaire).filter(Questionnaire.id == questionnaire_id).first()
+        if not questionnaire:
+            return JSONResponse(
+                status_code=404,
+                content={"message": "Questionnaire not found"}
+            )
+        
+        if not questionnaire.is_checked_out() or questionnaire.checked_out_by != user:
+            return JSONResponse(
+                status_code=403,
+                content={"message": "You don't have permission to check in this questionnaire"}
+            )
+        
+        # Update fields
+        questionnaire.question = question
+        questionnaire.answer_key = answer_key
+        questionnaire.category = category
+        questionnaire.sub_category = sub_category
+        questionnaire.compliance_answer = compliance_answer
+        questionnaire.notes = notes
+        questionnaire.last_updated = datetime.utcnow()
+        questionnaire.checked_out_by = None
+        questionnaire.checked_out_at = None
+        
+        db.commit()
+        db.refresh(questionnaire)
+        return questionnaire.to_dict()
+    finally:
+        db.close()
+
+@app.post("/questionnaires/{questionnaire_id}/cancel-checkout")
+async def cancel_checkout(
+    questionnaire_id: int,
+    user: str = Form(...)
+):
+    """
+    Cancel a checkout without saving changes.
+    
+    Args:
+        questionnaire_id (int): ID of the questionnaire
+        user (str): Username of the person canceling the checkout
+        
+    Returns:
+        dict: Updated questionnaire entry
+    """
+    db = SessionLocal()
+    try:
+        questionnaire = db.query(Questionnaire).filter(Questionnaire.id == questionnaire_id).first()
+        if not questionnaire:
+            return JSONResponse(
+                status_code=404,
+                content={"message": "Questionnaire not found"}
+            )
+        
+        if not questionnaire.is_checked_out() or questionnaire.checked_out_by != user:
+            return JSONResponse(
+                status_code=403,
+                content={"message": "You don't have permission to cancel this checkout"}
+            )
+        
+        questionnaire.checked_out_by = None
+        questionnaire.checked_out_at = None
+        db.commit()
+        db.refresh(questionnaire)
+        return questionnaire.to_dict()
     finally:
         db.close()
 

@@ -1,5 +1,4 @@
 import React, { useState } from 'react'
-import { Container, Title, Paper, Stack, Text, Button, FileInput, Group, Alert, Box, Badge, Progress, Tooltip, Textarea, TextInput } from '@mantine/core'
 import { IconUpload, IconInfoCircle, IconX } from '@tabler/icons-react'
 
 function KnowledgeBaseUpload() {
@@ -286,366 +285,201 @@ function KnowledgeBaseUpload() {
   }
 
   return (
-    <Container size="xl" py={40}>
-      <Stack>
-        <Group position="apart" align="center">
-          <Stack spacing={4}>
-            <Title order={1} size={32}>Upload Knowledge</Title>
-            <Text c="dimmed" size="lg">Upload and manage your knowledge base entries.</Text>
-          </Stack>
-        </Group>
-
-        <Paper p="xl" radius="lg" withBorder>
-          <Stack>
-            <Group position="apart">
-              <Title order={2} size={24}>Upload Questions</Title>
-              <Tooltip label="Bulk upload questions and answers using a CSV file" position="left">
-                <IconInfoCircle size={20} style={{ color: '#94A3B8' }} />
-              </Tooltip>
-            </Group>
-            <Stack>
-              <FileInput
-                label={<Text c="#FFFFFF" fw={700}>Select CSV File</Text>}
-                description={<Text c="dimmed" size="sm" component="span">Upload a CSV file containing questions and answers (columns: question, answer_key, category, sub_category, compliance_answer, notes).</Text>}
-                placeholder="Click to select file"
+    <div className="container mx-auto px-4 py-8">
+      <h1 className="text-2xl font-bold mb-6">Knowledge Base Upload</h1>
+      
+      <div className="bg-white rounded-lg shadow-md p-6 mb-6">
+        <div className="space-y-6">
+          <div>
+            <label className="block text-sm font-medium mb-2">Upload CSV File</label>
+            <div className="flex items-center gap-4">
+              <input
+                type="file"
+                onChange={(e) => setSelectedFile(e.target.files[0])}
                 accept=".csv"
-                value={selectedFile}
-                onChange={setSelectedFile}
-                icon={<IconUpload size={20} />}
+                className="block w-full text-sm text-gray-500
+                  file:mr-4 file:py-2 file:px-4
+                  file:rounded-md file:border-0
+                  file:text-sm file:font-semibold
+                  file:bg-blue-50 file:text-blue-700
+                  hover:file:bg-blue-100"
               />
-              {selectedFile && (
-                <Group>
-                  <Button
-                    onClick={handleFileUpload}
-                    loading={isUploading}
-                    leftSection={<IconUpload size={20} />}
-                  >
-                    Upload File
-                  </Button>
-                  <Button
-                    variant="light"
-                    onClick={() => setSelectedFile(null)}
-                  >
-                    Clear
-                  </Button>
-                </Group>
-              )}
-            </Stack>
-          </Stack>
-        </Paper>
-
-        <Paper p="xl" radius="lg" withBorder>
-          <Stack>
-            <Group position="apart">
-              <Title order={2} size={24}>Add New Question</Title>
-              <Tooltip label="Add individual questions and answers to the knowledge base" position="left">
-                <IconInfoCircle size={20} style={{ color: '#94A3B8' }} />
-              </Tooltip>
-            </Group>
-            <form onSubmit={handleSubmit}>
-              <Stack>
-                <Textarea
-                  label={
-                    <Text c="#FFFFFF" style={{ display: 'inline' }} fw={700}>
-                      Question<Text component="span" c="red" ml={4}>*</Text>
-                    </Text>
-                  }
-                  description={<Box component="span" c="dimmed" style={{ fontSize: '14px' }}>Enter the question you want to add to the knowledge base.</Box>}
-                  placeholder="e.g., What are the operating hours?"
-                  value={newQuestion}
-                  onChange={(e) => setNewQuestion(e.target.value)}
-                  minRows={3}
-                  required
-                  styles={{
-                    input: {
-                      color: '#000000',
-                      fontSize: '16px',
-                      lineHeight: 1.6
-                    }
-                  }}
-                />
-                <Textarea
-                  label={
-                    <Text c="#FFFFFF" style={{ display: 'inline' }} fw={700}>
-                      Answer<Text component="span" c="red" ml={4}>*</Text>
-                    </Text>
-                  }
-                  description={<Box component="span" c="dimmed" style={{ fontSize: '14px' }}>Provide a clear and concise answer to the question.</Box>}
-                  placeholder="e.g., Our operating hours are Monday to Friday, 9 AM to 5 PM"
-                  value={newAnswerKey}
-                  onChange={(e) => setNewAnswerKey(e.target.value)}
-                  minRows={3}
-                  required
-                  styles={{
-                    input: {
-                      color: '#000000',
-                      fontSize: '16px',
-                      lineHeight: 1.6
-                    }
-                  }}
-                />
-                <TextInput
-                  label={
-                    <Text c="#FFFFFF" style={{ display: 'inline' }} fw={700}>
-                      Category<Text component="span" c="red" ml={4}>*</Text>
-                    </Text>
-                  }
-                  description={<Box component="span" c="dimmed" style={{ fontSize: '14px' }}>Specify the main category this Q&A belongs to.</Box>}
-                  placeholder="e.g., Scheduling, Billing, Compliance"
-                  value={newCategory}
-                  onChange={(e) => setNewCategory(e.target.value)}
-                  required
-                  styles={{
-                    input: {
-                      color: '#000000'
-                    }
-                  }}
-                />
-                <TextInput
-                  label={
-                    <Text c="#FFFFFF" style={{ display: 'inline' }} fw={700}>
-                      Sub-category<Text component="span" c="dimmed" ml={4}>(Optional)</Text>
-                    </Text>
-                  }
-                  description={<Box component="span" c="dimmed" style={{ fontSize: '14px' }}>Specify a sub-category if applicable.</Box>}
-                  placeholder="e.g., Regular Hours, Emergency Hours"
-                  value={newSubCategory}
-                  onChange={(e) => setNewSubCategory(e.target.value)}
-                  styles={{
-                    input: {
-                      color: '#000000'
-                    }
-                  }}
-                />
-                <TextInput
-                  label={
-                    <Text c="#FFFFFF" style={{ display: 'inline' }} fw={700}>
-                      Domain<Text component="span" c="dimmed" ml={4}>(Optional)</Text>
-                    </Text>
-                  }
-                  description={<Box component="span" c="dimmed" style={{ fontSize: '14px' }}>Specify the domain this Q&A belongs to.</Box>}
-                  placeholder="e.g., Operations, HR, IT"
-                  value={newDomain}
-                  onChange={(e) => setNewDomain(e.target.value)}
-                  styles={{
-                    input: {
-                      color: '#000000'
-                    }
-                  }}
-                />
-                <Textarea
-                  label={
-                    <Text c="#FFFFFF" style={{ display: 'inline' }} fw={700}>
-                      Compliance Answer<Text component="span" c="dimmed" ml={4}>(Optional)</Text>
-                    </Text>
-                  }
-                  description={<Box component="span" c="dimmed" style={{ fontSize: '14px' }}>Add any compliance-related information if applicable.</Box>}
-                  placeholder="e.g., According to policy section 2.1..."
-                  value={newComplianceAnswer}
-                  onChange={(e) => setNewComplianceAnswer(e.target.value)}
-                  minRows={2}
-                  styles={{
-                    input: {
-                      color: '#000000',
-                      fontSize: '16px',
-                      lineHeight: 1.6
-                    }
-                  }}
-                />
-                <Textarea
-                  label={
-                    <Text c="#FFFFFF" style={{ display: 'inline' }} fw={700}>
-                      Notes<Text component="span" c="dimmed" ml={4}>(Optional)</Text>
-                    </Text>
-                  }
-                  description={<Box component="span" c="dimmed" style={{ fontSize: '14px' }}>Add any additional notes or context about this Q&A.</Box>}
-                  placeholder="e.g., This policy was updated on..."
-                  value={newNotes}
-                  onChange={(e) => setNewNotes(e.target.value)}
-                  minRows={2}
-                  styles={{
-                    input: {
-                      color: '#000000',
-                      fontSize: '16px',
-                      lineHeight: 1.6
-                    }
-                  }}
-                />
-                <Group position="right" mt={16}>
-                  <Button type="submit" size="md">Add Question</Button>
-                </Group>
-              </Stack>
-            </form>
-          </Stack>
-        </Paper>
-
-        {uploadStatus && (
-          <Alert 
-            color={uploadStatus.type === 'success' ? 'green' : 'red'} 
-            title={uploadStatus.type === 'success' ? 'Success' : 'Error'}
-            withCloseButton
-            onClose={() => setUploadStatus(null)}
-            styles={(theme) => ({
-              root: {
-                backgroundColor: uploadStatus.type === 'success' ? '#22c55e' : theme.colors.red[6]
-              },
-              title: {
-                color: uploadStatus.type === 'success' ? '#ffffff' : undefined
-              },
-              message: {
-                color: uploadStatus.type === 'success' ? '#ffffff' : undefined,
-                whiteSpace: 'pre-line'
-              },
-              closeButton: {
-                color: uploadStatus.type === 'success' ? '#ffffff' : undefined,
-                '&:hover': {
-                  backgroundColor: uploadStatus.type === 'success' ? 'rgba(255, 255, 255, 0.1)' : undefined
-                }
-              }
-            })}
-          >
-            {uploadStatus.message}
-          </Alert>
-        )}
-
-        {showPopup && similarQuestions.length > 0 && (
-          <div style={{
-            position: 'fixed',
-            top: '50%',
-            left: '50%',
-            transform: 'translate(-50%, -50%)',
-            backgroundColor: '#f5f5f5',
-            color: '#2C2E33',
-            padding: '20px',
-            borderRadius: '8px',
-            boxShadow: '0 4px 15px rgba(0, 0, 0, 0.1)',
-            width: '90%',
-            maxWidth: '800px',
-            maxHeight: '90vh',
-            overflowY: 'auto',
-            zIndex: 1000
-          }}>
-            <div style={{
-              display: 'flex',
-              justifyContent: 'space-between',
-              alignItems: 'center',
-              marginBottom: '20px',
-              borderBottom: '1px solid #e0e0e0',
-              paddingBottom: '10px'
-            }}>
-              <Text size="lg" fw={700} c="#000000">Similar Questions Found</Text>
-              <Button 
-                variant="subtle" 
-                color="dark" 
-                onClick={handleClosePopup}
-                leftSection={<IconX size={16} />}
+              <button
+                onClick={handleFileUpload}
+                disabled={!selectedFile || isUploading}
+                className="px-4 py-2 bg-blue-600 text-white rounded-md hover:bg-blue-700 disabled:opacity-50 disabled:cursor-not-allowed"
               >
-                Close
-              </Button>
+                {isUploading ? 'Uploading...' : 'Upload'}
+              </button>
+            </div>
+          </div>
+
+          {uploadStatus && (
+            <div className={`p-4 rounded-md ${uploadStatus.type === 'success' ? 'bg-green-50 text-green-700' : 'bg-red-50 text-red-700'}`}>
+              <div className="flex">
+                <div className="flex-shrink-0">
+                  {uploadStatus.type === 'success' ? (
+                    <svg className="h-5 w-5 text-green-400" viewBox="0 0 20 20" fill="currentColor">
+                      <path fillRule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zm3.707-9.293a1 1 0 00-1.414-1.414L9 10.586 7.707 9.293a1 1 0 00-1.414 1.414l2 2a1 1 0 001.414 0l4-4z" clipRule="evenodd" />
+                    </svg>
+                  ) : (
+                    <svg className="h-5 w-5 text-red-400" viewBox="0 0 20 20" fill="currentColor">
+                      <path fillRule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zM8.707 7.293a1 1 0 00-1.414 1.414L8.586 10l-1.293 1.293a1 1 0 101.414 1.414L10 11.414l1.293 1.293a1 1 0 001.414-1.414L11.414 10l1.293-1.293a1 1 0 00-1.414-1.414L10 8.586 8.707 7.293z" clipRule="evenodd" />
+                    </svg>
+                  )}
+                </div>
+                <div className="ml-3">
+                  <p className="whitespace-pre-line">{uploadStatus.message}</p>
+                </div>
+              </div>
+            </div>
+          )}
+
+          <form onSubmit={handleSubmit} className="space-y-4">
+            <div>
+              <label className="block text-sm font-medium mb-2">Question</label>
+              <textarea
+                value={newQuestion}
+                onChange={(e) => setNewQuestion(e.target.value)}
+                className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
+                rows={3}
+              />
             </div>
 
-            <Stack>
-              <Text size="sm" c="dimmed">
-                Question {currentIndex + 1} of {similarQuestions.length}
-              </Text>
-              
-              <Paper p="md" withBorder>
-                <Stack spacing="sm">
-                  <Group position="apart">
-                    <Text size="lg" fw={700}>New Question</Text>
-                    <Badge color="blue">New Entry</Badge>
-                  </Group>
-                  <Text>{similarQuestions[currentIndex].new_question}</Text>
-                  <Text size="lg" fw={700}>Answer</Text>
-                  <Text>{similarQuestions[currentIndex].new_answer}</Text>
-                  <Text size="lg" fw={700}>Category</Text>
-                  <Text>{similarQuestions[currentIndex].new_category}</Text>
-                  {similarQuestions[currentIndex].new_sub_category && (
-                    <>
-                      <Text size="lg" fw={700}>Sub-category</Text>
-                      <Text>{similarQuestions[currentIndex].new_sub_category}</Text>
-                    </>
-                  )}
-                  {similarQuestions[currentIndex].new_domain && (
-                    <>
-                      <Text size="lg" fw={700}>Domain</Text>
-                      <Text>{similarQuestions[currentIndex].new_domain}</Text>
-                    </>
-                  )}
-                  {similarQuestions[currentIndex].new_compliance_answer && (
-                    <>
-                      <Text size="lg" fw={700}>Compliance Answer</Text>
-                      <Text>{similarQuestions[currentIndex].new_compliance_answer}</Text>
-                    </>
-                  )}
-                  {similarQuestions[currentIndex].new_notes && (
-                    <>
-                      <Text size="lg" fw={700}>Notes</Text>
-                      <Text>{similarQuestions[currentIndex].new_notes}</Text>
-                    </>
-                  )}
-                </Stack>
-              </Paper>
+            <div>
+              <label className="block text-sm font-medium mb-2">Answer Key</label>
+              <textarea
+                value={newAnswerKey}
+                onChange={(e) => setNewAnswerKey(e.target.value)}
+                className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
+                rows={3}
+              />
+            </div>
 
-              <Paper p="md" withBorder>
-                <Stack spacing="sm">
-                  <Group position="apart">
-                    <Text size="lg" fw={700}>Similar Existing Question</Text>
-                    <Badge color="yellow">Similarity: {(similarQuestions[currentIndex].similarity * 100).toFixed(1)}%</Badge>
-                  </Group>
-                  <Text>{similarQuestions[currentIndex].similar_to.question}</Text>
-                  <Text size="lg" fw={700}>Answer</Text>
-                  <Text>{similarQuestions[currentIndex].similar_to.answer_key}</Text>
-                  <Text size="lg" fw={700}>Category</Text>
-                  <Text>{similarQuestions[currentIndex].similar_to.category}</Text>
-                  {similarQuestions[currentIndex].similar_to.sub_category && (
-                    <>
-                      <Text size="lg" fw={700}>Sub-category</Text>
-                      <Text>{similarQuestions[currentIndex].similar_to.sub_category}</Text>
-                    </>
-                  )}
-                  {similarQuestions[currentIndex].similar_to.domain && (
-                    <>
-                      <Text size="lg" fw={700}>Domain</Text>
-                      <Text>{similarQuestions[currentIndex].similar_to.domain}</Text>
-                    </>
-                  )}
-                  {similarQuestions[currentIndex].similar_to.compliance_answer && (
-                    <>
-                      <Text size="lg" fw={700}>Compliance Answer</Text>
-                      <Text>{similarQuestions[currentIndex].similar_to.compliance_answer}</Text>
-                    </>
-                  )}
-                  {similarQuestions[currentIndex].similar_to.notes && (
-                    <>
-                      <Text size="lg" fw={700}>Notes</Text>
-                      <Text>{similarQuestions[currentIndex].similar_to.notes}</Text>
-                    </>
-                  )}
-                  <Group spacing={4}>
-                    <Text size="sm" c="dimmed">Created:</Text>
-                    <Text size="sm" c="dimmed">{formatDate(similarQuestions[currentIndex].similar_to.created_at)}</Text>
-                  </Group>
-                  <Group spacing={4}>
-                    <Text size="sm" c="dimmed">Last Updated:</Text>
-                    <Text size="sm" c="dimmed">{formatDate(similarQuestions[currentIndex].similar_to.last_updated)}</Text>
-                  </Group>
-                </Stack>
-              </Paper>
+            <div className="grid grid-cols-2 gap-4">
+              <div>
+                <label className="block text-sm font-medium mb-2">Category</label>
+                <input
+                  type="text"
+                  value={newCategory}
+                  onChange={(e) => setNewCategory(e.target.value)}
+                  className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
+                />
+              </div>
 
-              <Group position="apart" mt="xl">
-                <Button variant="light" onClick={() => handleResolveSimilar(false)}>
+              <div>
+                <label className="block text-sm font-medium mb-2">Sub Category</label>
+                <input
+                  type="text"
+                  value={newSubCategory}
+                  onChange={(e) => setNewSubCategory(e.target.value)}
+                  className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
+                />
+              </div>
+            </div>
+
+            <div>
+              <label className="block text-sm font-medium mb-2">Domain</label>
+              <input
+                type="text"
+                value={newDomain}
+                onChange={(e) => setNewDomain(e.target.value)}
+                className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
+              />
+            </div>
+
+            <div>
+              <label className="block text-sm font-medium mb-2">Compliance Answer</label>
+              <textarea
+                value={newComplianceAnswer}
+                onChange={(e) => setNewComplianceAnswer(e.target.value)}
+                className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
+                rows={3}
+              />
+            </div>
+
+            <div>
+              <label className="block text-sm font-medium mb-2">Notes</label>
+              <textarea
+                value={newNotes}
+                onChange={(e) => setNewNotes(e.target.value)}
+                className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
+                rows={3}
+              />
+            </div>
+
+            <button
+              type="submit"
+              className="w-full px-4 py-2 bg-blue-600 text-white rounded-md hover:bg-blue-700"
+            >
+              Add Question
+            </button>
+          </form>
+        </div>
+      </div>
+
+      {showPopup && similarQuestions.length > 0 && (
+        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center p-4">
+          <div className="bg-white rounded-lg shadow-xl p-6 max-w-2xl w-full">
+            <div className="flex justify-between items-center mb-4">
+              <h2 className="text-xl font-semibold">Similar Question Found</h2>
+              <button
+                onClick={handleClosePopup}
+                className="text-gray-500 hover:text-gray-700"
+              >
+                <IconX size={24} />
+              </button>
+            </div>
+
+            <div className="space-y-4">
+              <div>
+                <h3 className="font-medium mb-2">New Question:</h3>
+                <p className="p-3 bg-gray-50 rounded-md">{similarQuestions[currentIndex].new_question}</p>
+              </div>
+
+              <div>
+                <div className="flex items-center gap-2 mb-2">
+                  <h3 className="font-medium">Similar Existing Question:</h3>
+                  <span className="text-sm text-gray-500">
+                    (Similarity: {(similarQuestions[currentIndex].similarity * 100).toFixed(1)}%)
+                  </span>
+                </div>
+                <p className="p-3 bg-gray-50 rounded-md">{similarQuestions[currentIndex].similar_to.question}</p>
+              </div>
+
+              <div className="flex justify-end gap-4 mt-6">
+                <button
+                  onClick={() => handleResolveSimilar(false)}
+                  className="px-4 py-2 border border-gray-300 rounded-md hover:bg-gray-50"
+                >
                   Keep Existing
-                </Button>
-                <Button onClick={() => handleResolveSimilar(true)}>
+                </button>
+                <button
+                  onClick={() => handleResolveSimilar(true)}
+                  className="px-4 py-2 bg-blue-600 text-white rounded-md hover:bg-blue-700"
+                >
                   Keep New
-                </Button>
-              </Group>
-            </Stack>
+                </button>
+              </div>
+
+              {similarQuestions.length > 1 && (
+                <div className="mt-4 flex items-center justify-between">
+                  <span className="text-sm text-gray-500">
+                    Question {currentIndex + 1} of {similarQuestions.length}
+                  </span>
+                  <div className="h-2 bg-gray-200 rounded-full flex-grow mx-4">
+                    <div
+                      className="h-2 bg-blue-600 rounded-full"
+                      style={{ width: `${((currentIndex + 1) / similarQuestions.length) * 100}%` }}
+                    />
+                  </div>
+                </div>
+              )}
+            </div>
           </div>
-        )}
-      </Stack>
-    </Container>
+        </div>
+      )}
+    </div>
   )
 }
 

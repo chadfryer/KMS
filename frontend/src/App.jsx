@@ -9,8 +9,7 @@
  */
 
 import React from 'react'
-import { HashRouter as Router, Routes, Route, useNavigate, useLocation, createRoutesFromElements } from 'react-router-dom'
-import { AppShell, Group, Stack, Button, Container, Title, Text } from '@mantine/core'
+import { HashRouter as Router, Routes, Route, useNavigate, useLocation } from 'react-router-dom'
 import { IconHome, IconDatabase, IconUpload, IconClipboardList, IconChartBar, IconInbox } from '@tabler/icons-react'
 import DatabaseView from './DatabaseView.jsx'
 import KnowledgeBaseUpload from './KnowledgeBaseUpload.jsx'
@@ -19,7 +18,6 @@ import MetricsView from './MetricsView.jsx'
 import MainView from './MainView.jsx'
 import QuestionnaireBacklog from './QuestionnaireBacklog.jsx'
 import headerImage from './assets/header-image.png'
-import './App.css'
 
 const FUTURE_FLAGS = {
   v7_startTransition: true,
@@ -30,73 +28,72 @@ function NavContent() {
   const navigate = useNavigate();
   const location = useLocation();
   
+  const navButtonClass = (path) => `
+    w-full flex items-center px-4 py-2 mb-2 rounded
+    ${location.pathname === path 
+      ? 'bg-blue-600 text-white' 
+      : 'bg-white text-gray-700 hover:bg-gray-100'}
+    transition-colors duration-200
+  `;
+  
   return (
-    <Stack spacing="md">
-      <Group justify="center" mb="md">
+    <div className="flex flex-col">
+      <div className="flex justify-center mb-6">
         <img 
           src={headerImage} 
           alt="Chad's Knowledge Management" 
-          style={{ 
-            height: '180px',
-            objectFit: 'contain'
-          }} 
+          className="h-[180px] object-contain"
         />
-      </Group>
-      <Button
-        variant={location.pathname === '/' ? 'filled' : 'light'}
+      </div>
+      
+      <button
+        className={navButtonClass('/')}
         onClick={() => navigate('/')}
-        leftSection={<IconHome size={20} className={location.pathname !== '/' ? 'navIconUnselected' : ''} />}
-        fullWidth
-        className="navButton"
       >
+        <IconHome size={20} className="mr-2" />
         Home
-      </Button>
-      <Button
-        variant={location.pathname === '/knowledge-base' ? 'filled' : 'light'}
+      </button>
+      
+      <button
+        className={navButtonClass('/knowledge-base')}
         onClick={() => navigate('/knowledge-base')}
-        leftSection={<IconDatabase size={20} className={location.pathname !== '/knowledge-base' ? 'navIconUnselected' : ''} />}
-        fullWidth
-        className="navButton"
       >
+        <IconDatabase size={20} className="mr-2" />
         View Knowledge Base
-      </Button>
-      <Button
-        variant={location.pathname === '/knowledge-base-upload' ? 'filled' : 'light'}
+      </button>
+      
+      <button
+        className={navButtonClass('/knowledge-base-upload')}
         onClick={() => navigate('/knowledge-base-upload')}
-        leftSection={<IconUpload size={20} className={location.pathname !== '/knowledge-base-upload' ? 'navIconUnselected' : ''} />}
-        fullWidth
-        className="navButton"
       >
+        <IconUpload size={20} className="mr-2" />
         Upload Knowledge
-      </Button>
-      <Button
-        variant={location.pathname === '/questionnaire-management' ? 'filled' : 'light'}
+      </button>
+      
+      <button
+        className={navButtonClass('/questionnaire-management')}
         onClick={() => navigate('/questionnaire-management')}
-        leftSection={<IconClipboardList size={20} className={location.pathname !== '/questionnaire-management' ? 'navIconUnselected' : ''} />}
-        fullWidth
-        className="navButton"
       >
+        <IconClipboardList size={20} className="mr-2" />
         Process Questionnaire
-      </Button>
-      <Button
-        variant={location.pathname === '/metrics' ? 'filled' : 'light'}
+      </button>
+      
+      <button
+        className={navButtonClass('/metrics')}
         onClick={() => navigate('/metrics')}
-        leftSection={<IconChartBar size={20} className={location.pathname !== '/metrics' ? 'navIconUnselected' : ''} />}
-        fullWidth
-        className="navButton"
       >
+        <IconChartBar size={20} className="mr-2" />
         Metrics
-      </Button>
-      <Button
-        variant={location.pathname === '/backlog' ? 'filled' : 'light'}
+      </button>
+      
+      <button
+        className={navButtonClass('/backlog')}
         onClick={() => navigate('/backlog')}
-        leftSection={<IconInbox size={20} className={location.pathname !== '/backlog' ? 'navIconUnselected' : ''} />}
-        fullWidth
-        className="navButton"
       >
+        <IconInbox size={20} className="mr-2" />
         Questionnaire Backlog
-      </Button>
-    </Stack>
+      </button>
+    </div>
   );
 }
 
@@ -104,44 +101,14 @@ function AppContent() {
   const navigate = useNavigate();
   
   return (
-    <AppShell
-      navbar={{
-        width: 300,
-        breakpoint: 'sm',
-        collapsed: { mobile: true }
-      }}
-      layout="default"
-      padding="md"
-      withBorder
-      styles={(theme) => ({
-        root: {
-          width: '100%',
-          minHeight: '100vh',
-          backgroundColor: '#1A1B1E'
-        },
-        main: {
-          width: '100%',
-          flex: 1,
-          backgroundColor: '#1A1B1E',
-          paddingLeft: 'calc(300px + 40px)', // navbar width + padding
-          paddingRight: '40px',
-          paddingTop: '20px',
-          paddingBottom: '20px',
-          [`@media (maxWidth: ${theme.breakpoints.sm})`]: {
-            paddingLeft: '40px'
-          }
-        },
-        navbar: {
-          backgroundColor: '#25262B',
-          borderRight: '1px solid #2C2E33'
-        }
-      })}
-    >
-      <AppShell.Navbar p="md">
+    <div className="flex min-h-screen bg-gray-100">
+      {/* Sidebar */}
+      <nav className="w-[300px] bg-white p-4 border-r border-gray-200 fixed h-full overflow-y-auto">
         <NavContent />
-      </AppShell.Navbar>
+      </nav>
 
-      <AppShell.Main>
+      {/* Main Content */}
+      <main className="flex-1 ml-[300px] p-8">
         <Routes>
           <Route path="/" element={<MainView onViewDatabase={() => navigate('/knowledge-base')} />} />
           <Route path="/knowledge-base" element={<DatabaseView />} />
@@ -151,8 +118,8 @@ function AppContent() {
           <Route path="/backlog" element={<QuestionnaireBacklog />} />
           <Route path="*" element={<MainView onViewDatabase={() => navigate('/knowledge-base')} />} />
         </Routes>
-      </AppShell.Main>
-    </AppShell>
+      </main>
+    </div>
   );
 }
 

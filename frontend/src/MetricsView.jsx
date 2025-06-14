@@ -1,7 +1,12 @@
 import React, { useState, useEffect } from 'react'
-import { Container, Title, Paper, Stack, Text, Group, Alert, Grid, RingProgress, List, Loader } from '@mantine/core'
 import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, PieChart, Pie, Cell } from 'recharts'
 import { IconAlertCircle } from '@tabler/icons-react'
+
+const LoadingSpinner = () => (
+  <div className="flex justify-center items-center h-screen">
+    <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-gray-900"></div>
+  </div>
+);
 
 function MetricsView() {
   const [metrics, setMetrics] = useState({
@@ -14,18 +19,24 @@ function MetricsView() {
     reviewStatus: { data: null, loading: true, error: null },
   })
 
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState(null);
+
   useEffect(() => {
     const fetchMetric = async (endpoint) => {
       try {
+        setLoading(true);
         const response = await fetch(`http://localhost:8000/metrics/${endpoint}`)
         if (!response.ok) {
           throw new Error(`Failed to fetch ${endpoint}: ${response.statusText}`)
         }
         const data = await response.json()
         return { data, error: null }
-      } catch (error) {
-        console.error(`Error fetching ${endpoint}:`, error)
-        return { data: null, error: error.message }
+      } catch (err) {
+        console.error(`Error fetching ${endpoint}:`, err)
+        return { data: null, error: err.message }
+      } finally {
+        setLoading(false);
       }
     }
 
@@ -126,16 +137,16 @@ function MetricsView() {
               textAnchor="end"
               height={70}
               interval={0}
-              tick={{ fill: 'var(--mantine-color-dimmed)' }}
+              tick={{ fill: 'var(--text-dimmed)' }}
             />
-            <YAxis tick={{ fill: 'var(--mantine-color-dimmed)' }} />
+            <YAxis tick={{ fill: 'var(--text-dimmed)' }} />
             <Tooltip 
               contentStyle={{ 
                 backgroundColor: '#333333',
                 border: '1px solid #444444',
-                color: 'var(--mantine-color-dimmed)'
+                color: 'var(--text-dimmed)'
               }}
-              labelStyle={{ color: 'var(--mantine-color-dimmed)' }}
+              labelStyle={{ color: 'var(--text-dimmed)' }}
             />
             <Bar 
               dataKey="count" 
@@ -177,7 +188,7 @@ function MetricsView() {
                   <text
                     x={x}
                     y={y}
-                    fill="var(--mantine-color-dimmed)"
+                    fill="var(--text-dimmed)"
                     textAnchor={x > cx ? 'start' : 'end'}
                     dominantBaseline="central"
                   >
@@ -185,7 +196,7 @@ function MetricsView() {
                   </text>
                 );
               }}
-              labelStyle={{ fill: 'var(--mantine-color-dimmed)' }}
+              labelStyle={{ fill: 'var(--text-dimmed)' }}
             >
               {data.map((entry, index) => (
                 <Cell key={`cell-${index}`} fill={COLORS[index % COLORS.length]} />
@@ -195,9 +206,9 @@ function MetricsView() {
               contentStyle={{ 
                 backgroundColor: '#333333',
                 border: '1px solid #444444',
-                color: 'var(--mantine-color-dimmed)'
+                color: 'var(--text-dimmed)'
               }}
-              labelStyle={{ color: 'var(--mantine-color-dimmed)' }}
+              labelStyle={{ color: 'var(--text-dimmed)' }}
             />
           </PieChart>
         </ResponsiveContainer>
@@ -237,7 +248,7 @@ function MetricsView() {
                     <text
                       x={x}
                       y={y}
-                      fill="var(--mantine-color-dimmed)"
+                      fill="var(--text-dimmed)"
                       textAnchor={x > cx ? 'start' : 'end'}
                       dominantBaseline="central"
                     >
@@ -261,7 +272,7 @@ function MetricsView() {
             </PieChart>
           </ResponsiveContainer>
         </div>
-        <List styles={{ itemWrapper: { color: 'var(--mantine-color-dimmed)' } }}>
+        <List styles={{ itemWrapper: { color: 'var(--text-dimmed)' } }}>
           <List.Item>Average Length: {data.statistics.average_length}</List.Item>
           <List.Item>Max Length: {data.statistics.max_length}</List.Item>
           <List.Item>Min Length: {data.statistics.min_length}</List.Item>
@@ -289,7 +300,7 @@ function MetricsView() {
             <Text size="sm" c="dimmed">Last 24h</Text>
           </div>
         </Group>
-        <List styles={{ itemWrapper: { color: 'var(--mantine-color-dimmed)' } }}>
+        <List styles={{ itemWrapper: { color: 'var(--text-dimmed)' } }}>
           <List.Item>Average Daily: {data.activity_metrics.average_daily_submissions}</List.Item>
           <List.Item>Days Active: {data.total_metrics.days_active}</List.Item>
           <List.Item>Last 7 Days: {data.activity_metrics.last_7d_submissions}</List.Item>
@@ -345,15 +356,15 @@ function MetricsView() {
                 angle={-45}
                 textAnchor="end"
                 height={60}
-                tick={{ fill: 'var(--mantine-color-dimmed)' }}
+                tick={{ fill: 'var(--text-dimmed)' }}
               />
               <YAxis 
-                tick={{ fill: 'var(--mantine-color-dimmed)' }}
+                tick={{ fill: 'var(--text-dimmed)' }}
                 label={{ 
                   value: 'Number of Questionnaires',
                   angle: -90,
                   position: 'insideLeft',
-                  fill: 'var(--mantine-color-dimmed)',
+                  fill: 'var(--text-dimmed)',
                   style: { textAnchor: 'middle' }
                 }}
               />
@@ -361,9 +372,9 @@ function MetricsView() {
                 contentStyle={{
                   backgroundColor: '#333333',
                   border: '1px solid #444444',
-                  color: 'var(--mantine-color-dimmed)'
+                  color: 'var(--text-dimmed)'
                 }}
-                labelStyle={{ color: 'var(--mantine-color-dimmed)' }}
+                labelStyle={{ color: 'var(--text-dimmed)' }}
                 formatter={(value, name, props) => [`${value} (${props.payload.percentage}%)`, props.payload.name]}
               />
               <Bar 
@@ -383,6 +394,18 @@ function MetricsView() {
     )
 
     return renderMetricSection("Review Status", content, loading, error)
+  }
+
+  if (loading) {
+    return <LoadingSpinner />;
+  }
+
+  if (error) {
+    return (
+      <div className="bg-red-50 border border-red-200 text-red-700 p-4 rounded">
+        {error}
+      </div>
+    );
   }
 
   return (

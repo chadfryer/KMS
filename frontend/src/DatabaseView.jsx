@@ -1,400 +1,171 @@
 import React, { useState, useEffect } from 'react'
-import { Container, Title, Paper, Stack, Text, Button, Loader, ScrollArea, TextInput, Group, Pagination, ActionIcon, Select, Box, Tooltip, Card, Badge, Collapse } from '@mantine/core'
-import { IconSearch, IconArrowUp, IconArrowDown, IconInfoCircle, IconX, IconPlus, IconAdjustments } from '@tabler/icons-react'
+import { IconDatabase, IconSearch, IconUpload } from '@tabler/icons-react'
+import { useNavigate } from 'react-router-dom'
 
-function DatabaseView({ onBack }) {
-  const [questions, setQuestions] = useState([])
-  const [filteredQuestions, setFilteredQuestions] = useState([])
-  const [isLoading, setIsLoading] = useState(false)
+const DatabaseView = () => {
+  const [databases, setDatabases] = useState([])
+  const [loading, setLoading] = useState(true)
   const [error, setError] = useState(null)
-  const [searchQuery, setSearchQuery] = useState('')
-  const [currentPage, setCurrentPage] = useState(1)
-  const [sortConfig, setSortConfig] = useState({ key: 'last_updated', direction: 'desc' })
-  const [fieldSearches, setFieldSearches] = useState([])
-  const [showAdvancedSearch, setShowAdvancedSearch] = useState(false)
-  const [itemsPerPage, setItemsPerPage] = useState(5)
-
-  const searchFields = [
-    { value: 'question', label: 'Question' },
-    { value: 'answer_key', label: 'Answer' },
-    { value: 'domain', label: 'Domain' },
-    { value: 'category', label: 'Category' },
-    { value: 'sub_category', label: 'Sub-category' },
-    { value: 'compliance_answer', label: 'Compliance Answer' },
-    { value: 'notes', label: 'Notes' }
-  ]
-
-  const pageSizeOptions = [
-    { value: '5', label: '5 per page' },
-    { value: '10', label: '10 per page' },
-    { value: '25', label: '25 per page' },
-    { value: '50', label: '50 per page' },
-    { value: '100', label: '100 per page' }
-  ]
+  const [searchTerm, setSearchTerm] = useState('')
+  const [expandedId, setExpandedId] = useState(null)
+  const navigate = useNavigate()
 
   useEffect(() => {
-    fetchQuestions()
+    fetchDatabases()
   }, [])
 
-  const fetchQuestions = async () => {
-    setIsLoading(true)
-    setError(null)
+  const fetchDatabases = async () => {
     try {
-      const response = await fetch('http://localhost:8000/questions')
-      if (!response.ok) throw new Error('Failed to fetch questions')
-      const data = await response.json()
-      setQuestions(data)
-      setFilteredQuestions(data)
-    } catch (err) {
-      setError(err.message)
-    } finally {
-      setIsLoading(false)
-    }
-  }
-
-  const handleSearch = async (e) => {
-    if (e) e.preventDefault()
-    
-    if (!searchQuery.trim() && fieldSearches.length === 0) {
-      setFilteredQuestions(questions)
-      return
-    }
-
-    let filtered = [...questions]
-
-    // Apply basic search
-    if (searchQuery.trim()) {
-      const searchLower = searchQuery.toLowerCase()
-      filtered = filtered.filter(item => 
-        (item.question?.toLowerCase().includes(searchLower) ?? false) ||
-        (item.category?.toLowerCase().includes(searchLower) ?? false) ||
-        (item.sub_category?.toLowerCase().includes(searchLower) ?? false) ||
-        (item.answer_key?.toLowerCase().includes(searchLower) ?? false)
-      )
-    }
-
-    // Apply field-specific searches
-    fieldSearches.forEach(fieldSearch => {
-      if (fieldSearch.value.trim()) {
-        const searchLower = fieldSearch.value.toLowerCase()
-        filtered = filtered.filter(item => 
-          (item[fieldSearch.field]?.toLowerCase().includes(searchLower) ?? false)
-        )
+      setLoading(true)
+      const response = await fetch('/api/databases')
+      if (!response.ok) {
+        throw new Error('Failed to fetch databases')
       }
-    })
-
-    setFilteredQuestions(filtered)
-    setCurrentPage(1)
+      const data = await response.json()
+      setDatabases(data || [])
+      setError(null)
+    } catch (err) {
+      console.error('Error fetching databases:', err)
+      setDatabases([])
+      // Only set error if it's not a 404 (empty database)
+      if (err.message !== 'Failed to fetch databases') {
+        setError('An unexpected error occurred while fetching the database')
+      }
+    } finally {
+      setLoading(false)
+    }
   }
 
-  const formatDate = (dateString) => {
-    return new Date(dateString).toLocaleString('en-US', {
-      year: 'numeric',
-      month: 'short',
-      day: 'numeric',
-      hour: '2-digit',
-      minute: '2-digit'
-    })
-  }
-
-  const handleSort = (key) => {
-    setSortConfig(prevConfig => ({
-      key,
-      direction: prevConfig.key === key && prevConfig.direction === 'asc' ? 'desc' : 'asc'
-    }))
-  }
-
-  const sortedQuestions = [...filteredQuestions].sort((a, b) => {
-    const aValue = a[sortConfig.key] || ''
-    const bValue = b[sortConfig.key] || ''
-    const direction = sortConfig.direction === 'asc' ? 1 : -1
-    return aValue.toString().localeCompare(bValue.toString()) * direction
+  const filteredDatabases = databases.filter(db => {
+    return db.name?.toLowerCase().includes(searchTerm.toLowerCase()) ||
+           db.description?.toLowerCase().includes(searchTerm.toLowerCase())
   })
 
-  const totalPages = Math.ceil(sortedQuestions.length / itemsPerPage)
-  const paginatedQuestions = sortedQuestions.slice(
-    (currentPage - 1) * itemsPerPage,
-    currentPage * itemsPerPage
-  )
-
-  if (isLoading) {
+  if (loading) {
     return (
-      <Paper p="xl" radius="lg" withBorder>
-        <Stack align="center">
-          <Loader size="lg" />
-          <Text size="sm" c="dimmed">Loading questions...</Text>
-        </Stack>
-      </Paper>
-    )
-  }
-
-  if (error) {
-    return (
-      <Paper p="xl" radius="lg" withBorder>
-        <Stack align="center">
-          <Text c="red" size="lg">{error}</Text>
-        </Stack>
-      </Paper>
+      <div className="flex justify-center items-center h-screen">
+        <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-gray-900"></div>
+      </div>
     )
   }
 
   return (
-    <div style={{ 
-      backgroundColor: '#1A1B1E', 
-      minHeight: '100vh', 
-      width: '100%', 
-      position: 'absolute',
-      top: 0,
-      left: 0,
-      right: 0,
-      padding: '40px 20px'
-    }}>
-      <Container size="xl" p={0}>
-        <Stack spacing="lg">
-          <Group position="apart">
-            <Title order={2} c="#FFFFFF">Knowledge Base</Title>
-            <Group>
-              <TextInput
-                placeholder="Search questions..."
-                value={searchQuery}
-                onChange={(e) => {
-                  setSearchQuery(e.target.value)
-                  if (!showAdvancedSearch) handleSearch()
-                }}
-                icon={<IconSearch size={16} />}
-                style={{ width: '300px' }}
-                styles={{
-                  input: {
-                    backgroundColor: '#25262B',
-                    color: '#FFFFFF',
-                    border: '1px solid #373A40'
-                  }
-                }}
-              />
-              <Tooltip label="Toggle advanced search">
-                <ActionIcon 
-                  variant={showAdvancedSearch ? "filled" : "subtle"}
-                  onClick={() => setShowAdvancedSearch(!showAdvancedSearch)}
-                  c="#FFFFFF"
-                >
-                  <IconAdjustments size={20} />
-                </ActionIcon>
-              </Tooltip>
-            </Group>
-          </Group>
+    <div className="container mx-auto p-8">
+      <div className="flex items-center justify-between mb-8">
+        <div>
+          <h1 className="text-3xl font-bold">Knowledge Base</h1>
+          <p className="text-gray-600 mt-2">View and manage your question-answer database</p>
+        </div>
+        <button
+          onClick={() => navigate('/knowledge-base-upload')}
+          className="px-4 py-2 bg-blue-600 text-white rounded-md hover:bg-blue-700 flex items-center gap-2"
+        >
+          <IconUpload size={20} />
+          Add New Entries
+        </button>
+      </div>
 
-          <Collapse in={showAdvancedSearch}>
-            <Paper p="md" radius="md" withBorder styles={{ root: { backgroundColor: '#25262B' } }}>
-              <form onSubmit={handleSearch}>
-                <Stack spacing="md">
-                  <Text size="sm" fw={500} c="#FFFFFF">Advanced Search</Text>
-                  
-                  {fieldSearches.map((fieldSearch, index) => (
-                    <Group key={index} align="flex-end" spacing="sm">
-                      <Select
-                        label="Search Field"
-                        data={searchFields}
-                        value={fieldSearch.field}
-                        onChange={(value) => {
-                          const newFieldSearches = [...fieldSearches]
-                          newFieldSearches[index] = { ...newFieldSearches[index], field: value }
-                          setFieldSearches(newFieldSearches)
-                        }}
-                        style={{ minWidth: '200px' }}
-                        styles={{
-                          label: { color: '#FFFFFF' },
-                          input: {
-                            backgroundColor: '#25262B',
-                            color: '#FFFFFF',
-                            border: '1px solid #373A40'
-                          },
-                          item: {
-                            '&[data-selected]': {
-                              backgroundColor: '#1A1B1E',
-                              color: '#FFFFFF'
-                            }
-                          }
-                        }}
-                      />
-                      <TextInput
-                        label="Search Value"
-                        placeholder={`Search in ${searchFields.find(f => f.value === fieldSearch.field)?.label}`}
-                        value={fieldSearch.value}
-                        onChange={(e) => {
-                          const newFieldSearches = [...fieldSearches]
-                          newFieldSearches[index] = { ...newFieldSearches[index], value: e.target.value }
-                          setFieldSearches(newFieldSearches)
-                        }}
-                        style={{ flex: 1 }}
-                        styles={{
-                          label: { color: '#FFFFFF' },
-                          input: {
-                            backgroundColor: '#25262B',
-                            color: '#FFFFFF',
-                            border: '1px solid #373A40'
-                          }
-                        }}
-                      />
-                      <ActionIcon 
-                        color="red" 
-                        onClick={() => {
-                          const newFieldSearches = [...fieldSearches]
-                          newFieldSearches.splice(index, 1)
-                          setFieldSearches(newFieldSearches)
-                        }}
-                        variant="subtle"
-                        size="lg"
-                      >
-                        <IconX size={20} />
-                      </ActionIcon>
-                    </Group>
-                  ))}
+      {error && (
+        <div className="mb-6 bg-red-50 border border-red-200 text-red-700 p-4 rounded">
+          {error}
+        </div>
+      )}
 
-                  <Group position="right">
-                    <Button 
-                      variant="subtle"
-                      leftSection={<IconPlus size={20} />}
-                      onClick={() => setFieldSearches([...fieldSearches, { field: 'question', value: '' }])}
-                      c="#FFFFFF"
-                    >
-                      Add Field Search
-                    </Button>
-                    <Button 
-                      variant="subtle" 
-                      onClick={() => {
-                        setSearchQuery('')
-                        setFieldSearches([])
-                        setFilteredQuestions(questions)
-                      }}
-                      c="#FFFFFF"
-                    >
-                      Clear
-                    </Button>
-                    <Button 
-                      type="submit"
-                      leftSection={<IconSearch size={20} />}
-                    >
-                      Search
-                    </Button>
-                  </Group>
-                </Stack>
-              </form>
-            </Paper>
-          </Collapse>
+      <div className="mb-6">
+        <div className="relative">
+          <input
+            type="text"
+            placeholder="Search knowledge base..."
+            value={searchTerm}
+            onChange={(e) => setSearchTerm(e.target.value)}
+            className="pl-10 pr-4 py-2 w-full border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+          />
+          <IconSearch className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400" size={16} />
+        </div>
+      </div>
 
-          <Stack spacing="md">
-            {paginatedQuestions.map((item) => (
-              <Card key={item.id} shadow="sm" padding="lg" radius="md" withBorder styles={{
-                root: {
-                  backgroundColor: '#25262B'
-                }
-              }}>
-                <Stack spacing="lg">
-                  <Stack spacing="md">
-                    <Group spacing="lg">
-                      {item.domain && (
-                        <Group spacing="xs" noWrap>
-                          <Text fw={600} c="#666666" size="sm">Domain:</Text>
-                          <Text c="#FFFFFF" size="sm">{item.domain}</Text>
-                        </Group>
-                      )}
-                      {item.category && (
-                        <Group spacing="xs" noWrap>
-                          <Text fw={600} c="#666666" size="sm">Category:</Text>
-                          <Text c="#FFFFFF" size="sm">{item.category}</Text>
-                        </Group>
-                      )}
-                      {item.sub_category && (
-                        <Group spacing="xs" noWrap>
-                          <Text fw={600} c="#666666" size="sm">Sub-category:</Text>
-                          <Text c="#FFFFFF" size="sm">{item.sub_category}</Text>
-                        </Group>
-                      )}
-                    </Group>
+      {databases.length === 0 ? (
+        <div className="text-center py-16 bg-gray-50 rounded-lg border-2 border-dashed border-gray-300">
+          <IconDatabase size={48} className="mx-auto text-gray-400 mb-4" />
+          <h3 className="text-xl font-semibold text-gray-700 mb-2">No entries in the knowledge base yet</h3>
+          <p className="text-gray-600 mb-6">Get started by adding your first question-answer pair or uploading a CSV file.</p>
+          <button
+            onClick={() => navigate('/knowledge-base-upload')}
+            className="px-6 py-3 bg-blue-600 text-white rounded-md hover:bg-blue-700 inline-flex items-center gap-2"
+          >
+            <IconUpload size={20} />
+            Add New Entries
+          </button>
+        </div>
+      ) : filteredDatabases.length === 0 ? (
+        <div className="text-center py-12">
+          <p className="text-gray-500 text-lg">No entries found matching your search criteria</p>
+        </div>
+      ) : (
+        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+          {filteredDatabases.map((db) => (
+            <div key={db.id} className="bg-white rounded-lg shadow overflow-hidden">
+              <div 
+                className="p-6 cursor-pointer hover:bg-gray-50"
+                onClick={() => setExpandedId(expandedId === db.id ? null : db.id)}
+              >
+                <div className="flex items-center justify-between mb-4">
+                  <div className="flex items-center space-x-3">
+                    <IconDatabase className="text-gray-400" size={24} />
+                    <h2 className="text-xl font-semibold">{db.name}</h2>
+                  </div>
+                  <span className={`px-3 py-1 rounded-full text-sm font-medium ${
+                    db.status === 'active' ? 'bg-green-100 text-green-800' :
+                    db.status === 'inactive' ? 'bg-red-100 text-red-800' :
+                    'bg-yellow-100 text-yellow-800'
+                  }`}>
+                    {db.status}
+                  </span>
+                </div>
 
-                    <Stack spacing="xs">
-                      <Text fw={600} c="#666666" size="sm">Question:</Text>
-                      <Text size="lg" c="#FFFFFF" style={{ lineHeight: 1.6 }}>
-                        {item.question || 'No question available'}
-                      </Text>
-                    </Stack>
+                <div className="space-y-2">
+                  <div className="flex justify-between text-sm">
+                    <span className="text-gray-500">Size:</span>
+                    <span className="font-medium">{db.size}</span>
+                  </div>
+                  <div className="flex justify-between text-sm">
+                    <span className="text-gray-500">Last Updated:</span>
+                    <span className="font-medium">{new Date(db.lastUpdated).toLocaleDateString()}</span>
+                  </div>
+                </div>
 
-                    <Stack spacing="xs">
-                      <Text fw={600} c="#666666" size="sm">Answer:</Text>
-                      <Text c="#FFFFFF" style={{ whiteSpace: 'pre-wrap', lineHeight: 1.6 }}>
-                        {item.answer_key || 'No answer available'}
-                      </Text>
-                    </Stack>
-
-                    {item.notes && (
-                      <Stack spacing="xs">
-                        <Text fw={600} c="#666666" size="sm">Notes:</Text>
-                        <Text c="#FFFFFF" style={{ whiteSpace: 'pre-wrap', lineHeight: 1.6 }}>
-                          {item.notes}
-                        </Text>
-                      </Stack>
-                    )}
-
-                    <Group position="right" spacing="xs">
-                      <Text fw={600} c="#666666" size="sm">Last Updated:</Text>
-                      <Text c="#FFFFFF" size="sm">{formatDate(item.last_updated)}</Text>
-                    </Group>
-                  </Stack>
-                </Stack>
-              </Card>
-            ))}
-          </Stack>
-
-          {totalPages > 0 && (
-            <Group position="center" mt="md" align="center">
-              <Group spacing="xs" align="center">
-                <Text size="sm" c="#FFFFFF">Show</Text>
-                <Select
-                  value={itemsPerPage.toString()}
-                  onChange={(value) => {
-                    setItemsPerPage(Number(value))
-                    setCurrentPage(1)
-                  }}
-                  data={pageSizeOptions}
-                  style={{ width: 130 }}
-                  styles={{
-                    input: {
-                      backgroundColor: '#25262B',
-                      color: '#FFFFFF',
-                      border: '1px solid #373A40'
-                    },
-                    item: {
-                      '&[data-selected]': {
-                        backgroundColor: '#1A1B1E',
-                        color: '#FFFFFF'
-                      }
-                    }
-                  }}
-                />
-              </Group>
-              <Pagination
-                total={totalPages}
-                value={currentPage}
-                onChange={setCurrentPage}
-                size="sm"
-                styles={{
-                  control: {
-                    backgroundColor: '#25262B',
-                    color: '#FFFFFF',
-                    border: '1px solid #373A40',
-                    '&[data-active]': {
-                      backgroundColor: '#228BE6'
-                    }
-                  }
-                }}
-              />
-              <Text size="sm" c="#FFFFFF">
-                Showing {Math.min((currentPage - 1) * itemsPerPage + 1, filteredQuestions.length)} - {Math.min(currentPage * itemsPerPage, filteredQuestions.length)} of {filteredQuestions.length} entries
-              </Text>
-            </Group>
-          )}
-        </Stack>
-      </Container>
+                {expandedId === db.id && (
+                  <div className="mt-4 pt-4 border-t border-gray-200">
+                    <div className="space-y-3">
+                      <div>
+                        <h3 className="text-sm font-medium text-gray-500">Description</h3>
+                        <p className="mt-1 text-gray-700">{db.description || 'No description available'}</p>
+                      </div>
+                      <div>
+                        <h3 className="text-sm font-medium text-gray-500">Connection Details</h3>
+                        <div className="mt-1 space-y-2">
+                          <div className="flex justify-between text-sm">
+                            <span className="text-gray-500">Host:</span>
+                            <span className="font-medium">{db.host}</span>
+                          </div>
+                          <div className="flex justify-between text-sm">
+                            <span className="text-gray-500">Port:</span>
+                            <span className="font-medium">{db.port}</span>
+                          </div>
+                          <div className="flex justify-between text-sm">
+                            <span className="text-gray-500">Type:</span>
+                            <span className="font-medium">{db.type}</span>
+                          </div>
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+                )}
+              </div>
+            </div>
+          ))}
+        </div>
+      )}
     </div>
   )
 }

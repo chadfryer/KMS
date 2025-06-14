@@ -1,449 +1,250 @@
 import React, { useState, useEffect } from 'react'
-import { 
-  Container, 
-  Title, 
-  Paper, 
-  Stack, 
-  Text, 
-  Badge, 
-  Group, 
-  Loader, 
-  Button, 
-  Textarea
-} from '@mantine/core'
 import { IconDownload, IconEdit, IconCheck, IconX } from '@tabler/icons-react'
 
-function QuestionnaireBacklog() {
-  const [backlogEntries, setBacklogEntries] = useState([])
-  const [isLoading, setIsLoading] = useState(true)
+const QuestionnaireBacklog = () => {
+  const [backlog, setBacklog] = useState([])
+  const [loading, setLoading] = useState(true)
   const [error, setError] = useState(null)
   const [showPopup, setShowPopup] = useState(false)
   const [selectedEntry, setSelectedEntry] = useState(null)
-  const [editedAnswers, setEditedAnswers] = useState({})
-  const [acceptedAnswers, setAcceptedAnswers] = useState([])
 
   useEffect(() => {
-    let isMounted = true;
-
-    const fetchData = async () => {
-      try {
-        const response = await fetch('http://localhost:8000/questionnaire-backlog')
-        if (!response.ok) {
-          throw new Error(`HTTP error! status: ${response.status}`)
-        }
-        const data = await response.json()
-        if (isMounted) {
-          setBacklogEntries(data.entries || [])
-          setIsLoading(false)
-        }
-      } catch (error) {
-        console.error('Error fetching backlog:', error)
-        if (isMounted) {
-          setError(error.message)
-          setIsLoading(false)
-        }
-      }
-    }
-
-    fetchData()
-
-    return () => {
-      isMounted = false
-    }
+    fetchBacklog()
   }, [])
+
+  const fetchBacklog = async () => {
+    try {
+      setLoading(true)
+      const response = await fetch('/api/backlog')
+      const data = await response.json()
+      setBacklog(data)
+    } catch (err) {
+      setError('Failed to fetch backlog')
+      console.error('Error fetching backlog:', err)
+    } finally {
+      setLoading(false)
+    }
+  }
 
   const handleDownload = async (entryId, filename) => {
     try {
-      // Create a copy of the current entries to modify
-      const updatedEntries = backlogEntries.map(entry => 
+      const updatedEntries = backlog.map(entry => 
         entry.id === entryId ? { ...entry, downloading: true } : entry
       );
-      setBacklogEntries(updatedEntries);
+      setBacklog(updatedEntries);
 
-      const response = await fetch(`http://localhost:8000/questionnaire-backlog/${entryId}/download`);
-      if (!response.ok) throw new Error('Failed to download file');
-      
+      const response = await fetch(`/api/backlog/${entryId}/download`);
+      if (!response.ok) throw new Error('Download failed');
+
       const blob = await response.blob();
       const url = window.URL.createObjectURL(blob);
       const a = document.createElement('a');
       a.href = url;
-      a.download = `processed_${filename}`;
+      a.download = filename;
       document.body.appendChild(a);
       a.click();
       window.URL.revokeObjectURL(url);
       document.body.removeChild(a);
 
-      const markResponse = await fetch(`http://localhost:8000/questionnaire-backlog/${entryId}/mark-downloaded`, {
-        method: 'POST'
-      });
-      if (!markResponse.ok) throw new Error('Failed to mark as downloaded');
-
-      // Update the local state directly instead of fetching again
-      const finalEntries = backlogEntries.map(entry => 
+      const finalEntries = backlog.map(entry => 
         entry.id === entryId ? { ...entry, downloaded: true, downloading: false } : entry
       );
-      setBacklogEntries(finalEntries);
-    } catch (error) {
-      console.error('Error downloading file:', error);
-      setError(error.message);
-      // Reset the downloading state on error
-      const resetEntries = backlogEntries.map(entry => 
+      setBacklog(finalEntries);
+    } catch (err) {
+      console.error('Error downloading file:', err);
+      setError(err.message);
+      const resetEntries = backlog.map(entry => 
         entry.id === entryId ? { ...entry, downloading: false } : entry
       );
-      setBacklogEntries(resetEntries);
+      setBacklog(resetEntries);
     }
   };
 
   const handleEdit = (entry) => {
-    if (!entry) return;
-    
-    console.log('Opening edit popup for entry:', entry);
-    
-    // Initialize editedAnswers with current answers
-    const initialAnswers = {};
-    (entry.low_confidence_answers || []).forEach(answer => {
-      if (answer && answer.index !== undefined) {
-        initialAnswers[answer.index] = answer.answer || '';
-      }
-    });
-    
-    console.log('Initializing answers:', initialAnswers);
-    
     setSelectedEntry(entry);
-    setEditedAnswers(initialAnswers);
-    setAcceptedAnswers(
-      (entry.low_confidence_answers || [])
-        .filter(a => a && a.accepted)
-        .map(a => a.index)
-        .filter(index => index !== undefined)
-    );
     setShowPopup(true);
-  }
+  };
 
   const handleClosePopup = () => {
-    setShowPopup(false)
-    setSelectedEntry(null)
-    setEditedAnswers({})
-    setAcceptedAnswers([])
-  }
+    setShowPopup(false);
+    setSelectedEntry(null);
+  };
 
-  const handleSaveEdits = async () => {
-    if (!selectedEntry) return;
-
+  const handleAcceptAnswer = async (entryId, questionId) => {
     try {
-      const response = await fetch(`http://localhost:8000/questionnaire-backlog/${selectedEntry.id}/update-answers`, {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json'
-        },
-        body: JSON.stringify({
-          edited_answers: editedAnswers,
-          accepted_answers: acceptedAnswers
-        })
-      })
+      const response = await fetch(`/api/backlog/${entryId}/questions/${questionId}/accept`, {
+        method: 'POST'
+      });
+      if (!response.ok) throw new Error('Failed to accept answer');
 
-      if (!response.ok) {
-        throw new Error('Failed to save edits')
-      }
+      const updatedResponse = await fetch('/api/backlog');
+      if (!updatedResponse.ok) throw new Error('Failed to refresh data');
 
-      const updatedResponse = await fetch('http://localhost:8000/questionnaire-backlog')
-      if (!updatedResponse.ok) {
-        throw new Error('Failed to fetch updated data')
-      }
-      const updatedData = await updatedResponse.json()
-      setBacklogEntries(updatedData.entries || [])
+      const updatedData = await updatedResponse.json();
+      setBacklog(updatedData.entries || []);
 
-      handleClosePopup()
-    } catch (error) {
-      console.error('Error saving edits:', error)
+      handleClosePopup();
+    } catch (err) {
+      console.error('Error accepting answer:', err);
+      setError(err.message);
     }
+  };
+
+  if (loading) {
+    return (
+      <div className="flex justify-center items-center h-screen">
+        <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-gray-900"></div>
+      </div>
+    );
   }
 
-  const formatDate = (dateString) => {
-    if (!dateString) return 'Date not available'
-    try {
-      const date = new Date(dateString)
-      if (isNaN(date.getTime())) return 'Invalid date'
-      return date.toLocaleString('en-US', {
-        year: 'numeric',
-        month: 'short',
-        day: 'numeric',
-        hour: '2-digit',
-        minute: '2-digit',
-        timeZone: 'UTC'
-      })
-    } catch (error) {
-      console.error('Error formatting date:', error)
-      return 'Date not available'
-    }
-  }
-
-  const getStatusColor = (status, downloaded) => {
-    if (status === 'failed') return 'red'
-    if (status === 'processing') return 'blue'
-    if (!downloaded) return 'cyan'
-    return 'green'
+  if (error) {
+    return (
+      <div className="bg-red-50 border border-red-200 text-red-700 p-4 rounded">
+        {error}
+      </div>
+    );
   }
 
   return (
-    <Container size="xl" py={40}>
-      <Stack spacing={40}>
-        <Group position="apart" align="center">
-          <Stack spacing={4}>
-            <Title order={1} size={32}>Questionnaire Backlog</Title>
-            <Text c="dimmed" size="lg">History of processed questionnaires and their status.</Text>
-          </Stack>
-        </Group>
+    <div className="container mx-auto p-8">
+      <h1 className="text-3xl font-bold mb-8">Questionnaire Backlog</h1>
 
-        {isLoading ? (
-          <Paper p={40} radius="lg" withBorder>
-            <Stack align="center" spacing={40}>
-              <Loader size="lg" />
-              <Text size="sm" c="dimmed">Loading backlog entries...</Text>
-            </Stack>
-          </Paper>
-        ) : error ? (
-          <Paper p={40} radius="lg" withBorder>
-            <Stack align="center" spacing={40}>
-              <Text c="red" size="lg">{error}</Text>
-            </Stack>
-          </Paper>
-        ) : backlogEntries.length === 0 ? (
-          <Paper p={40} radius="lg" withBorder>
-            <Stack align="center" spacing={40}>
-              <Text size="lg" c="dimmed">No questionnaires have been processed yet.</Text>
-            </Stack>
-          </Paper>
-        ) : (
-          <Stack spacing="md">
-            {backlogEntries.map((entry) => (
-              <Paper key={entry.id} p="lg" radius="md" withBorder>
-                <Stack spacing="md">
-                  <div style={{ 
-                    display: 'flex',
-                    alignItems: 'center',
-                    width: '100%',
-                    position: 'relative'
-                  }}>
-                    <Text size="lg" fw={500} style={{ flex: '1', minWidth: 0, overflow: 'hidden', textOverflow: 'ellipsis' }}>
-                      {entry.filename}
-                    </Text>
-                    <Group spacing="sm" position="right" ml="auto" style={{ zIndex: 2 }}>
-                      {entry.status !== 'failed' && entry.status !== 'processing' && (
-                        <Button
-                          variant="light"
-                          color="dark"
-                          leftSection={<IconEdit size={16} />}
-                          onClick={() => handleEdit(entry)}
-                        >
-                          Edit
-                        </Button>
-                      )}
-                      {entry.can_download && (
-                        <Button
-                          variant="light"
-                          color={entry.downloaded ? "gray" : "dark"}
-                          leftSection={<IconDownload size={16} />}
-                          onClick={() => handleDownload(entry.id, entry.filename)}
-                          disabled={entry.status === 'processing' || entry.status === 'failed' || entry.downloading}
-                          loading={entry.downloading}
-                        >
-                          {entry.downloading ? 'Downloading...' : 
-                           entry.downloaded ? 'Download Again' : 'Download'}
-                        </Button>
-                      )}
-                    </Group>
-                    <div style={{ 
-                      position: 'absolute',
-                      left: '50%',
-                      transform: 'translateX(-50%)',
-                      zIndex: 1
-                    }}>
-                      <Badge 
-                        size="lg"
-                        color={getStatusColor(entry.status, entry.downloaded)}
-                        variant="filled"
-                      >
-                        {entry.status === 'failed' ? 'Failed' :
-                         entry.status === 'processing' ? 'Processing' :
-                         !entry.downloaded ? 'In Review' : 'Completed'}
-                      </Badge>
-                    </div>
-                  </div>
+      <div className="grid grid-cols-1 gap-6">
+        {backlog.map((entry) => (
+          <div key={entry.id} className="bg-white p-6 rounded-lg shadow">
+            <div className="flex items-center justify-between mb-4">
+              <div>
+                <h2 className="text-xl font-semibold">{entry.filename}</h2>
+                <p className="text-gray-500 text-sm mt-1">
+                  Processed {new Date(entry.created_at).toLocaleDateString()}
+                </p>
+              </div>
+              <div className="flex items-center space-x-3">
+                {entry.status !== 'failed' && entry.status !== 'processing' && (
+                  <button
+                    onClick={() => handleEdit(entry)}
+                    className="inline-flex items-center px-3 py-2 border border-gray-300 rounded-md text-sm font-medium text-gray-700 bg-white hover:bg-gray-50"
+                  >
+                    <IconEdit className="w-4 h-4 mr-2" />
+                    Edit
+                  </button>
+                )}
+                {entry.can_download && (
+                  <button
+                    onClick={() => handleDownload(entry.id, entry.filename)}
+                    disabled={entry.status === 'processing' || entry.status === 'failed' || entry.downloading}
+                    className={`inline-flex items-center px-3 py-2 border rounded-md text-sm font-medium
+                      ${entry.downloading || entry.status === 'processing' || entry.status === 'failed'
+                        ? 'border-gray-300 text-gray-400 bg-gray-50 cursor-not-allowed'
+                        : 'border-gray-300 text-gray-700 bg-white hover:bg-gray-50'}`}
+                  >
+                    <IconDownload className="w-4 h-4 mr-2" />
+                    {entry.downloading ? 'Downloading...' : 
+                     entry.downloaded ? 'Download Again' : 'Download'}
+                  </button>
+                )}
+              </div>
+            </div>
 
-                  <Text size="sm" c="dimmed">Processed {formatDate(entry.created_at)}</Text>
+            <div className="grid grid-cols-4 gap-4 mb-4">
+              <div>
+                <span className="text-gray-500 text-sm">Questions</span>
+                <p className="text-lg font-semibold">{entry.questions_count}</p>
+              </div>
+              <div>
+                <span className="text-gray-500 text-sm">Processed</span>
+                <p className="text-lg font-semibold">{entry.processed_count}</p>
+              </div>
+              <div>
+                <span className="text-gray-500 text-sm">Success Rate</span>
+                <p className="text-lg font-semibold">{entry.success_rate}%</p>
+              </div>
+              <div>
+                <span className="text-gray-500 text-sm">In Review</span>
+                <p className={`text-lg font-semibold ${entry.unaccepted_answers_count > 0 ? 'text-red-600' : ''}`}>
+                  {entry.unaccepted_answers_count}
+                </p>
+              </div>
+            </div>
 
-                  <Group spacing="xl">
-                    <Stack spacing={2}>
-                      <Text size="sm" c="dimmed">Questions</Text>
-                      <Text size="lg" fw={500}>{entry.questions_count}</Text>
-                    </Stack>
-                    <Stack spacing={2}>
-                      <Text size="sm" c="dimmed">Processed</Text>
-                      <Text size="lg" fw={500}>{entry.processed_count}</Text>
-                    </Stack>
-                    <Stack spacing={2}>
-                      <Text size="sm" c="dimmed">Success Rate</Text>
-                      <Text size="lg" fw={500}>{entry.success_rate}%</Text>
-                    </Stack>
-                    <Stack spacing={2}>
-                      <Text size="sm" c="dimmed">Questions in Review</Text>
-                      <Group spacing={4} align="baseline">
-                        <Text size="lg" fw={500} c={entry.unaccepted_answers_count > 0 ? "red" : undefined}>
-                          {entry.unaccepted_answers_count}
-                        </Text>
-                      </Group>
-                    </Stack>
-                    {entry.entity && (
-                      <Stack spacing={2}>
-                        <Text size="sm" c="dimmed">Entity</Text>
-                        <Badge size="lg" variant="dot">{entry.entity}</Badge>
-                      </Stack>
-                    )}
-                  </Group>
+            <div className="flex items-center justify-between">
+              <span className={`px-3 py-1 rounded-full text-sm font-medium
+                ${entry.status === 'failed' ? 'bg-red-100 text-red-800' :
+                  entry.status === 'processing' ? 'bg-yellow-100 text-yellow-800' :
+                  !entry.downloaded ? 'bg-blue-100 text-blue-800' :
+                  'bg-green-100 text-green-800'}`}
+              >
+                {entry.status === 'failed' ? 'Failed' :
+                 entry.status === 'processing' ? 'Processing' :
+                 !entry.downloaded ? 'In Review' : 'Completed'}
+              </span>
+              {entry.entity && (
+                <span className="px-3 py-1 bg-gray-100 text-gray-800 rounded-full text-sm font-medium">
+                  {entry.entity}
+                </span>
+              )}
+            </div>
 
-                  {entry.error_message && (
-                    <Text size="sm" c="red">Error: {entry.error_message}</Text>
-                  )}
-                </Stack>
-              </Paper>
-            ))}
-          </Stack>
+            {entry.error_message && (
+              <div className="mt-4 p-4 bg-red-50 border border-red-200 rounded-lg">
+                <p className="text-red-700 text-sm">Error: {entry.error_message}</p>
+              </div>
+            )}
+          </div>
+        ))}
+
+        {backlog.length === 0 && (
+          <div className="text-center py-12">
+            <p className="text-gray-500 text-lg">No questionnaires in backlog</p>
+          </div>
         )}
-      </Stack>
+      </div>
 
       {showPopup && selectedEntry && (
-        <div style={{
-          position: 'fixed',
-          top: '50%',
-          left: '50%',
-          transform: 'translate(-50%, -50%)',
-          backgroundColor: '#f5f5f5',
-          color: '#2C2E33',
-          padding: '20px',
-          borderRadius: '8px',
-          boxShadow: '0 4px 15px rgba(0, 0, 0, 0.1)',
-          width: '90%',
-          maxWidth: '800px',
-          maxHeight: '90vh',
-          overflowY: 'auto',
-          zIndex: 1000
-        }}>
-          <div style={{
-            display: 'flex',
-            justifyContent: 'space-between',
-            alignItems: 'center',
-            marginBottom: '20px',
-            borderBottom: '1px solid #e0e0e0',
-            paddingBottom: '10px'
-          }}>
-            <Text size="lg" fw={700} c="#000000">Edit Questions in Review</Text>
-            <Button 
-              variant="subtle" 
-              color="dark" 
-              onClick={handleClosePopup}
-              leftSection={<IconX size={16} />}
-            >
-              Close
-            </Button>
-          </div>
+        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center p-4">
+          <div className="bg-white rounded-lg shadow-xl max-w-4xl w-full max-h-[90vh] overflow-y-auto">
+            <div className="p-6">
+              <div className="flex items-center justify-between mb-6">
+                <h2 className="text-2xl font-bold">Edit Questionnaire</h2>
+                <button
+                  onClick={handleClosePopup}
+                  className="text-gray-400 hover:text-gray-500"
+                >
+                  <IconX className="w-6 h-6" />
+                </button>
+              </div>
 
-          <Stack spacing="md">
-            {selectedEntry.low_confidence_answers.map((answer, idx) => (
-              <Paper 
-                key={`${answer.index}-${idx}`}
-                p="md" 
-                withBorder 
-                shadow="sm"
-                bg="#2C2E33"
-                style={{ border: '1px solid #373A40' }}
-              >
-                <Stack spacing="xs">
-                  <Group position="apart">
-                    <Text size="sm" fw={500} c="white">Question:</Text>
-                    <Badge 
-                      color="#D35400"
-                      styles={{
-                        root: {
-                          backgroundColor: '#D35400',
-                          opacity: 0.85
-                        }
-                      }}
-                    >
-                      Confidence: {Math.round(answer.confidence * 100)}%
-                    </Badge>
-                  </Group>
-                  <Text c="white">{answer.question}</Text>
-                  
-                  <Text size="sm" fw={500} c="white">Original Answer:</Text>
-                  <Text c="#909296">{answer.answer}</Text>
-                  
-                  <Text size="sm" fw={500} c="white">Edit Answer:</Text>
-                  <Textarea
-                    value={editedAnswers[answer.index] ?? answer.answer}
-                    onChange={(event) => {
-                      const newValue = event.currentTarget?.value;
-                      if (newValue !== undefined) {
-                        setEditedAnswers(prev => ({
-                          ...prev,
-                          [answer.index]: newValue
-                        }));
-                      }
-                    }}
-                    rows={4}
-                    minRows={4}
-                    styles={{
-                      input: {
-                        backgroundColor: 'white',
-                        color: '#2C2E33',
-                        border: '1px solid #373A40',
-                        '&:focus': {
-                          borderColor: '#228BE6'
-                        }
-                      }
-                    }}
-                  />
-                  
-                  <Group position="right" spacing="xs">
-                    <Button
-                      variant={acceptedAnswers.includes(answer.index) ? "filled" : "light"}
-                      color="green"
-                      leftSection={<IconCheck size={16} color={acceptedAnswers.includes(answer.index) ? "white" : "black"} />}
-                      onClick={() => {
-                        if (acceptedAnswers.includes(answer.index)) {
-                          setAcceptedAnswers(prev => prev.filter(i => i !== answer.index))
-                        } else {
-                          setAcceptedAnswers(prev => [...prev, answer.index])
-                        }
-                      }}
-                    >
-                      {acceptedAnswers.includes(answer.index) ? 'Accepted' : 'Accept'}
-                    </Button>
-                  </Group>
-                </Stack>
-              </Paper>
-            ))}
-            
-            <Group position="right" mt="xl">
-              <Button variant="light" onClick={handleClosePopup}>Cancel</Button>
-              <Button onClick={handleSaveEdits}>Save Changes</Button>
-            </Group>
-          </Stack>
+              <div className="space-y-6">
+                {selectedEntry.questions?.map((question) => (
+                  <div key={question.id} className="p-4 border border-gray-200 rounded-lg">
+                    <div className="mb-4">
+                      <h3 className="font-medium text-gray-900">Question</h3>
+                      <p className="mt-1">{question.text}</p>
+                    </div>
+
+                    <div className="mb-4">
+                      <h3 className="font-medium text-gray-900">Suggested Answer</h3>
+                      <p className="mt-1">{question.suggested_answer}</p>
+                    </div>
+
+                    <div className="flex justify-end space-x-3">
+                      <button
+                        onClick={() => handleAcceptAnswer(selectedEntry.id, question.id)}
+                        className="inline-flex items-center px-4 py-2 border border-transparent rounded-md shadow-sm text-sm font-medium text-white bg-green-600 hover:bg-green-700"
+                      >
+                        <IconCheck className="w-4 h-4 mr-2" />
+                        Accept Answer
+                      </button>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            </div>
+          </div>
         </div>
       )}
-
-      {showPopup && (
-        <div style={{
-          position: 'fixed',
-          top: 0,
-          left: 0,
-          right: 0,
-          bottom: 0,
-          backgroundColor: 'rgba(0, 0, 0, 0.5)',
-          zIndex: 999
-        }} onClick={handleClosePopup} />
-      )}
-    </Container>
+    </div>
   )
 }
 

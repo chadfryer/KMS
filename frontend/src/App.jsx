@@ -108,7 +108,7 @@ function AppContent() {
       </nav>
 
       {/* Main Content */}
-      <main className="flex-1 ml-[300px] p-8">
+      <main className="flex-1 ml-[300px] p-6">
         <Routes>
           <Route path="/" element={<MainView onViewDatabase={() => navigate('/knowledge-base')} />} />
           <Route path="/knowledge-base" element={<DatabaseView />} />

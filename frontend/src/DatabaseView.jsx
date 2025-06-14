@@ -50,8 +50,8 @@ const DatabaseView = () => {
   }
 
   return (
-    <div className="container mx-auto p-8">
-      <div className="flex items-center justify-between mb-8">
+    <div className="container mx-auto p-6">
+      <div className="flex items-center justify-between mb-6">
         <div>
           <h1 className="text-3xl font-bold">Knowledge Base</h1>
           <p className="text-gray-600 mt-2">View and manage your question-answer database</p>

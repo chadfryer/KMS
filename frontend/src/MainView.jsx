@@ -12,8 +12,8 @@ function MainView({ onViewDatabase }) {
   const navigate = useNavigate()
 
   return (
-    <div className="container mx-auto py-10 px-4">
-      <div className="space-y-10">
+    <div className="container mx-auto p-6">
+      <div className="space-y-6">
         <div className="flex justify-between items-center">
           <div className="space-y-1">
             <h1 className="text-3xl font-bold">Knowledge Management System</h1>

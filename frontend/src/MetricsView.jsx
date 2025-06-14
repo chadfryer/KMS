@@ -51,7 +51,6 @@ function MetricsView() {
       }))
     }
 
-    // Fetch each metric independently
     const fetchMonthlyData = async () => {
       const { data, error } = await fetchMetric('monthly-entries')
       if (data && data.monthly_counts) {
@@ -94,7 +93,6 @@ function MetricsView() {
       updateMetric('reviewStatus', data, error)
     }
 
-    // Fetch all metrics independently
     fetchMonthlyData()
     fetchCategoryDistribution()
     fetchComplexityAnalysis()
@@ -105,18 +103,22 @@ function MetricsView() {
   const renderMetricSection = (title, content, loading, error) => {
     if (loading) {
       return (
-        <Stack align="center" spacing="md" py="xl">
-          <Loader size="md" />
-          <Text c="dimmed">Loading {title.toLowerCase()}...</Text>
-        </Stack>
+        <div className="flex flex-col items-center space-y-4 py-8">
+          <LoadingSpinner />
+          <p className="text-gray-600">Loading {title.toLowerCase()}...</p>
+        </div>
       )
     }
 
     if (error) {
       return (
-        <Alert icon={<IconAlertCircle size={16} />} title="Error" color="red">
-          {error}
-        </Alert>
+        <div className="bg-red-50 border border-red-200 text-red-700 p-4 rounded-lg flex items-center">
+          <IconAlertCircle className="mr-2" size={16} />
+          <div>
+            <p className="font-semibold">Error</p>
+            <p>{error}</p>
+          </div>
+        </div>
       )
     }
 
@@ -127,7 +129,7 @@ function MetricsView() {
     const { data, loading, error } = metrics.monthlyData
     
     const content = data?.length > 0 ? (
-      <div style={{ height: 300 }}>
+      <div className="h-[300px]">
         <ResponsiveContainer width="100%" height="100%">
           <BarChart data={data}>
             <CartesianGrid strokeDasharray="3 3" stroke="#444444" />
@@ -137,20 +139,18 @@ function MetricsView() {
               textAnchor="end"
               height={70}
               interval={0}
-              tick={{ fill: 'var(--text-dimmed)' }}
+              tick={{ fill: '#666666' }}
             />
-            <YAxis tick={{ fill: 'var(--text-dimmed)' }} />
+            <YAxis tick={{ fill: '#666666' }} />
             <Tooltip 
               contentStyle={{ 
-                backgroundColor: '#333333',
-                border: '1px solid #444444',
-                color: 'var(--text-dimmed)'
+                backgroundColor: '#ffffff',
+                border: '1px solid #e5e7eb',
               }}
-              labelStyle={{ color: 'var(--text-dimmed)' }}
             />
             <Bar 
               dataKey="count" 
-              fill="#CC0000"
+              fill="#3B82F6"
               name="Entries"
               radius={[4, 4, 0, 0]}
             />
@@ -158,7 +158,7 @@ function MetricsView() {
         </ResponsiveContainer>
       </div>
     ) : (
-      <Text c="dimmed">No monthly data available</Text>
+      <p className="text-gray-600">No monthly data available</p>
     )
 
     return renderMetricSection("Monthly Chart", content, loading, error)
@@ -166,10 +166,10 @@ function MetricsView() {
 
   const renderCategoryDistribution = () => {
     const { data, loading, error } = metrics.categoryDistribution
-    const COLORS = ['#CC0000', '#990000', '#660000', '#330000', '#FF0000', '#FF3333']
+    const COLORS = ['#3B82F6', '#2563EB', '#1D4ED8', '#1E40AF', '#1E3A8A', '#172554']
 
     const content = data?.length > 0 ? (
-      <div style={{ height: 300 }}>
+      <div className="h-[300px]">
         <ResponsiveContainer width="100%" height="100%">
           <PieChart>
             <Pie
@@ -188,7 +188,7 @@ function MetricsView() {
                   <text
                     x={x}
                     y={y}
-                    fill="var(--text-dimmed)"
+                    fill="#666666"
                     textAnchor={x > cx ? 'start' : 'end'}
                     dominantBaseline="central"
                   >
@@ -196,7 +196,6 @@ function MetricsView() {
                   </text>
                 );
               }}
-              labelStyle={{ fill: 'var(--text-dimmed)' }}
             >
               {data.map((entry, index) => (
                 <Cell key={`cell-${index}`} fill={COLORS[index % COLORS.length]} />
@@ -204,17 +203,15 @@ function MetricsView() {
             </Pie>
             <Tooltip 
               contentStyle={{ 
-                backgroundColor: '#333333',
-                border: '1px solid #444444',
-                color: 'var(--text-dimmed)'
+                backgroundColor: '#ffffff',
+                border: '1px solid #e5e7eb',
               }}
-              labelStyle={{ color: 'var(--text-dimmed)' }}
             />
           </PieChart>
         </ResponsiveContainer>
       </div>
     ) : (
-      <Text c="dimmed">No category distribution data available</Text>
+      <p className="text-gray-600">No category distribution data available</p>
     )
 
     return renderMetricSection("Category Distribution", content, loading, error)
@@ -222,11 +219,11 @@ function MetricsView() {
 
   const renderComplexityAnalysis = () => {
     const { data, loading, error } = metrics.complexityAnalysis
-    const COLORS = ['#CC0000', '#990000', '#660000']
+    const COLORS = ['#3B82F6', '#2563EB', '#1D4ED8']
 
     const content = data ? (
-      <Stack spacing="md">
-        <div style={{ height: 200 }}>
+      <div className="space-y-4">
+        <div className="h-[200px]">
           <ResponsiveContainer width="100%" height="100%">
             <PieChart>
               <Pie
@@ -248,7 +245,7 @@ function MetricsView() {
                     <text
                       x={x}
                       y={y}
-                      fill="var(--text-dimmed)"
+                      fill="#666666"
                       textAnchor={x > cx ? 'start' : 'end'}
                       dominantBaseline="central"
                     >
@@ -263,23 +260,21 @@ function MetricsView() {
               </Pie>
               <Tooltip 
                 contentStyle={{ 
-                  backgroundColor: '#333333',
-                  border: '1px solid #444444',
-                  color: '#CCCCCC'
+                  backgroundColor: '#ffffff',
+                  border: '1px solid #e5e7eb',
                 }}
-                labelStyle={{ color: '#CCCCCC' }}
               />
             </PieChart>
           </ResponsiveContainer>
         </div>
-        <List styles={{ itemWrapper: { color: 'var(--text-dimmed)' } }}>
-          <List.Item>Average Length: {data.statistics.average_length}</List.Item>
-          <List.Item>Max Length: {data.statistics.max_length}</List.Item>
-          <List.Item>Min Length: {data.statistics.min_length}</List.Item>
-        </List>
-      </Stack>
+        <ul className="space-y-2 text-gray-600">
+          <li>Average Length: {data.statistics.average_length}</li>
+          <li>Max Length: {data.statistics.max_length}</li>
+          <li>Min Length: {data.statistics.min_length}</li>
+        </ul>
+      </div>
     ) : (
-      <Text c="dimmed">No complexity analysis data available</Text>
+      <p className="text-gray-600">No complexity analysis data available</p>
     )
 
     return renderMetricSection("Complexity Analysis", content, loading, error)
@@ -289,25 +284,25 @@ function MetricsView() {
     const { data, loading, error } = metrics.systemSummary
 
     const content = data ? (
-      <Stack spacing="md">
-        <Group position="apart">
+      <div className="space-y-4">
+        <div className="flex justify-between">
           <div>
-            <Text size="xl" weight={700} c="dimmed">{data.total_metrics.total_questions}</Text>
-            <Text size="sm" c="dimmed">Total Questions</Text>
+            <p className="text-xl font-bold text-gray-600">{data.total_metrics.total_questions}</p>
+            <p className="text-sm text-gray-600">Total Questions</p>
           </div>
           <div>
-            <Text size="xl" weight={700} c="dimmed">{data.activity_metrics.last_24h_submissions}</Text>
-            <Text size="sm" c="dimmed">Last 24h</Text>
+            <p className="text-xl font-bold text-gray-600">{data.activity_metrics.last_24h_submissions}</p>
+            <p className="text-sm text-gray-600">Last 24h</p>
           </div>
-        </Group>
-        <List styles={{ itemWrapper: { color: 'var(--text-dimmed)' } }}>
-          <List.Item>Average Daily: {data.activity_metrics.average_daily_submissions}</List.Item>
-          <List.Item>Days Active: {data.total_metrics.days_active}</List.Item>
-          <List.Item>Last 7 Days: {data.activity_metrics.last_7d_submissions}</List.Item>
-        </List>
-      </Stack>
+        </div>
+        <ul className="space-y-2 text-gray-600">
+          <li>Average Daily: {data.activity_metrics.average_daily_submissions}</li>
+          <li>Days Active: {data.total_metrics.days_active}</li>
+          <li>Last 7 Days: {data.activity_metrics.last_7d_submissions}</li>
+        </ul>
+      </div>
     ) : (
-      <Text c="dimmed">No system summary data available</Text>
+      <p className="text-gray-600">No system summary data available</p>
     )
 
     return renderMetricSection("System Summary", content, loading, error)
@@ -316,30 +311,30 @@ function MetricsView() {
   const renderReviewStatus = () => {
     const { data, loading, error } = metrics.reviewStatus
     const COLORS = {
-      'In Review': '#FFD700',
-      'Completed': '#00CC00',
-      'Failed': '#CC0000',
-      'Processing': '#666666'
+      'In Review': '#FBBF24',
+      'Completed': '#34D399',
+      'Failed': '#EF4444',
+      'Processing': '#6B7280'
     }
 
     const content = data ? (
-      <Stack spacing="md">
-        <Group position="apart">
+      <div className="space-y-4">
+        <div className="flex justify-between">
           <div>
-            <Text size="xl" weight={700} c="dimmed">{data.total_questionnaires}</Text>
-            <Text size="sm" c="dimmed">Total Questionnaires</Text>
+            <p className="text-xl font-bold text-gray-600">{data.total_questionnaires}</p>
+            <p className="text-sm text-gray-600">Total Questionnaires</p>
           </div>
           <div>
-            <Text size="xl" weight={700} c="dimmed" color="yellow">{data.in_review}</Text>
-            <Text size="sm" c="dimmed">In Review</Text>
+            <p className="text-xl font-bold text-yellow-500">{data.in_review}</p>
+            <p className="text-sm text-gray-600">In Review</p>
           </div>
           <div>
-            <Text size="xl" weight={700} c="dimmed" color="green">{data.completed}</Text>
-            <Text size="sm" c="dimmed">Completed</Text>
+            <p className="text-xl font-bold text-green-500">{data.completed}</p>
+            <p className="text-sm text-gray-600">Completed</p>
           </div>
-        </Group>
+        </div>
 
-        <div style={{ height: 300 }}>
+        <div className="h-[300px]">
           <ResponsiveContainer width="100%" height="100%">
             <BarChart
               data={[
@@ -356,25 +351,23 @@ function MetricsView() {
                 angle={-45}
                 textAnchor="end"
                 height={60}
-                tick={{ fill: 'var(--text-dimmed)' }}
+                tick={{ fill: '#666666' }}
               />
               <YAxis 
-                tick={{ fill: 'var(--text-dimmed)' }}
+                tick={{ fill: '#666666' }}
                 label={{ 
                   value: 'Number of Questionnaires',
                   angle: -90,
                   position: 'insideLeft',
-                  fill: 'var(--text-dimmed)',
+                  fill: '#666666',
                   style: { textAnchor: 'middle' }
                 }}
               />
               <Tooltip
                 contentStyle={{
-                  backgroundColor: '#333333',
-                  border: '1px solid #444444',
-                  color: 'var(--text-dimmed)'
+                  backgroundColor: '#ffffff',
+                  border: '1px solid #e5e7eb',
                 }}
-                labelStyle={{ color: 'var(--text-dimmed)' }}
                 formatter={(value, name, props) => [`${value} (${props.payload.percentage}%)`, props.payload.name]}
               />
               <Bar 
@@ -388,9 +381,9 @@ function MetricsView() {
             </BarChart>
           </ResponsiveContainer>
         </div>
-      </Stack>
+      </div>
     ) : (
-      <Text c="dimmed">No review status data available</Text>
+      <p className="text-gray-600">No review status data available</p>
     )
 
     return renderMetricSection("Review Status", content, loading, error)
@@ -409,63 +402,53 @@ function MetricsView() {
   }
 
   return (
-    <Container size="xl" py={40}>
-      <Stack spacing={40}>
-        <Group position="apart" align="center">
-          <Stack spacing={4}>
-            <Title order={1} size={32}>Metrics Dashboard</Title>
-            <Text c="dimmed" size="lg">Knowledge Base Growth and Statistics</Text>
-          </Stack>
-        </Group>
+    <div className="container mx-auto py-10 px-4">
+      <div className="space-y-10">
+        <div className="flex justify-between items-center">
+          <div className="space-y-1">
+            <h1 className="text-3xl font-bold">Metrics Dashboard</h1>
+            <p className="text-gray-600 text-lg">Knowledge Base Growth and Statistics</p>
+          </div>
+        </div>
 
-        <Grid>
-          <Grid.Col span={12}>
-            <Paper p={40} radius="lg" withBorder>
-              <Stack spacing="xl">
-                <Title order={2} size={24}>Monthly Knowledge Base Entries</Title>
-                {renderMonthlyChart()}
-              </Stack>
-            </Paper>
-          </Grid.Col>
+        <div className="grid grid-cols-1 gap-6">
+          <div className="bg-white p-10 rounded-lg border border-gray-200">
+            <div className="space-y-6">
+              <h2 className="text-2xl font-semibold">Monthly Knowledge Base Entries</h2>
+              {renderMonthlyChart()}
+            </div>
+          </div>
 
-          <Grid.Col span={12}>
-            <Paper p={40} radius="lg" withBorder>
-              <Stack spacing="xl">
-                <Title order={2} size={24}>Category Distribution</Title>
-                {renderCategoryDistribution()}
-              </Stack>
-            </Paper>
-          </Grid.Col>
+          <div className="bg-white p-10 rounded-lg border border-gray-200">
+            <div className="space-y-6">
+              <h2 className="text-2xl font-semibold">Category Distribution</h2>
+              {renderCategoryDistribution()}
+            </div>
+          </div>
 
-          <Grid.Col span={6}>
-            <Paper p={40} radius="lg" withBorder>
-              <Stack spacing="xl">
-                <Title order={2} size={24}>Question Complexity</Title>
-                {renderComplexityAnalysis()}
-              </Stack>
-            </Paper>
-          </Grid.Col>
+          <div className="bg-white p-10 rounded-lg border border-gray-200">
+            <div className="space-y-6">
+              <h2 className="text-2xl font-semibold">Question Complexity</h2>
+              {renderComplexityAnalysis()}
+            </div>
+          </div>
 
-          <Grid.Col span={12}>
-            <Paper p={40} radius="lg" withBorder>
-              <Stack spacing="xl">
-                <Title order={2} size={24}>Review Status</Title>
-                {renderReviewStatus()}
-              </Stack>
-            </Paper>
-          </Grid.Col>
+          <div className="bg-white p-10 rounded-lg border border-gray-200">
+            <div className="space-y-6">
+              <h2 className="text-2xl font-semibold">Review Status</h2>
+              {renderReviewStatus()}
+            </div>
+          </div>
 
-          <Grid.Col span={12}>
-            <Paper p={40} radius="lg" withBorder>
-              <Stack spacing="xl">
-                <Title order={2} size={24}>System Summary</Title>
-                {renderSystemSummary()}
-              </Stack>
-            </Paper>
-          </Grid.Col>
-        </Grid>
-      </Stack>
-    </Container>
+          <div className="bg-white p-10 rounded-lg border border-gray-200">
+            <div className="space-y-6">
+              <h2 className="text-2xl font-semibold">System Summary</h2>
+              {renderSystemSummary()}
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
   )
 }
 

@@ -21,6 +21,7 @@ function KnowledgeBaseUpload() {
     newQuestionsKept: 0,
     existingQuestionsKept: 0
   })
+  const [newDomain, setNewDomain] = useState('')
 
   const handleSubmit = async (e) => {
     e.preventDefault()
@@ -30,6 +31,7 @@ function KnowledgeBaseUpload() {
       formData.append('answer_key', newAnswerKey)
       formData.append('category', newCategory)
       formData.append('sub_category', newSubCategory)
+      formData.append('domain', newDomain)
       formData.append('compliance_answer', newComplianceAnswer)
       formData.append('notes', newNotes)
 
@@ -45,6 +47,7 @@ function KnowledgeBaseUpload() {
         setNewAnswerKey('')
         setNewCategory('')
         setNewSubCategory('')
+        setNewDomain('')
         setNewComplianceAnswer('')
         setNewNotes('')
         setUploadStatus({
@@ -57,6 +60,7 @@ function KnowledgeBaseUpload() {
           new_answer: newAnswerKey,
           new_category: newCategory,
           new_sub_category: newSubCategory,
+          new_domain: newDomain,
           new_compliance_answer: newComplianceAnswer,
           new_notes: newNotes,
           similar_to: data.similar_question,
@@ -145,6 +149,7 @@ function KnowledgeBaseUpload() {
       formData.append('answer_key', keepNew ? currentQuestion.new_answer : currentQuestion.similar_to.answer_key)
       formData.append('category', keepNew ? currentQuestion.new_category : currentQuestion.similar_to.category)
       formData.append('sub_category', keepNew ? currentQuestion.new_sub_category : currentQuestion.similar_to.sub_category)
+      formData.append('domain', keepNew ? currentQuestion.new_domain : currentQuestion.similar_to.domain)
       formData.append('compliance_answer', keepNew ? currentQuestion.new_compliance_answer : currentQuestion.similar_to.compliance_answer)
       formData.append('notes', keepNew ? currentQuestion.new_notes : currentQuestion.similar_to.notes)
       
@@ -220,6 +225,7 @@ function KnowledgeBaseUpload() {
           formData.append('answer_key', currentQuestion.similar_to.answer_key);
           formData.append('category', currentQuestion.similar_to.category);
           formData.append('sub_category', currentQuestion.similar_to.sub_category);
+          formData.append('domain', currentQuestion.similar_to.domain);
           formData.append('compliance_answer', currentQuestion.similar_to.compliance_answer);
           formData.append('notes', currentQuestion.similar_to.notes);
           formData.append('replace_id', currentQuestion.similar_to.id);
@@ -341,7 +347,7 @@ function KnowledgeBaseUpload() {
                 <Textarea
                   label={
                     <Text c="#FFFFFF" style={{ display: 'inline' }} fw={700}>
-                      Question<Text component="span" c="red" ml={0}>*</Text>
+                      Question<Text component="span" c="red" ml={4}>*</Text>
                     </Text>
                   }
                   description={<Box component="span" c="dimmed" style={{ fontSize: '14px' }}>Enter the question you want to add to the knowledge base.</Box>}
@@ -349,6 +355,7 @@ function KnowledgeBaseUpload() {
                   value={newQuestion}
                   onChange={(e) => setNewQuestion(e.target.value)}
                   minRows={3}
+                  required
                   styles={{
                     input: {
                       color: '#000000',
@@ -360,7 +367,7 @@ function KnowledgeBaseUpload() {
                 <Textarea
                   label={
                     <Text c="#FFFFFF" style={{ display: 'inline' }} fw={700}>
-                      Answer<Text component="span" c="red" ml={0}>*</Text>
+                      Answer<Text component="span" c="red" ml={4}>*</Text>
                     </Text>
                   }
                   description={<Box component="span" c="dimmed" style={{ fontSize: '14px' }}>Provide a clear and concise answer to the question.</Box>}
@@ -368,6 +375,7 @@ function KnowledgeBaseUpload() {
                   value={newAnswerKey}
                   onChange={(e) => setNewAnswerKey(e.target.value)}
                   minRows={3}
+                  required
                   styles={{
                     input: {
                       color: '#000000',
@@ -379,13 +387,14 @@ function KnowledgeBaseUpload() {
                 <TextInput
                   label={
                     <Text c="#FFFFFF" style={{ display: 'inline' }} fw={700}>
-                      Category<Text component="span" c="red" ml={0}>*</Text>
+                      Category<Text component="span" c="red" ml={4}>*</Text>
                     </Text>
                   }
                   description={<Box component="span" c="dimmed" style={{ fontSize: '14px' }}>Specify the main category this Q&A belongs to.</Box>}
                   placeholder="e.g., Scheduling, Billing, Compliance"
                   value={newCategory}
                   onChange={(e) => setNewCategory(e.target.value)}
+                  required
                   styles={{
                     input: {
                       color: '#000000'
@@ -395,11 +404,11 @@ function KnowledgeBaseUpload() {
                 <TextInput
                   label={
                     <Text c="#FFFFFF" style={{ display: 'inline' }} fw={700}>
-                      Sub-category
+                      Sub-category<Text component="span" c="dimmed" ml={4}>(Optional)</Text>
                     </Text>
                   }
-                  description={<Box component="span" c="dimmed" style={{ fontSize: '14px' }}>Specify a more specific sub-category if applicable.</Box>}
-                  placeholder="e.g., Class Registration, Payment Processing"
+                  description={<Box component="span" c="dimmed" style={{ fontSize: '14px' }}>Specify a sub-category if applicable.</Box>}
+                  placeholder="e.g., Regular Hours, Emergency Hours"
                   value={newSubCategory}
                   onChange={(e) => setNewSubCategory(e.target.value)}
                   styles={{
@@ -408,14 +417,30 @@ function KnowledgeBaseUpload() {
                     }
                   }}
                 />
+                <TextInput
+                  label={
+                    <Text c="#FFFFFF" style={{ display: 'inline' }} fw={700}>
+                      Domain<Text component="span" c="dimmed" ml={4}>(Optional)</Text>
+                    </Text>
+                  }
+                  description={<Box component="span" c="dimmed" style={{ fontSize: '14px' }}>Specify the domain this Q&A belongs to.</Box>}
+                  placeholder="e.g., Operations, HR, IT"
+                  value={newDomain}
+                  onChange={(e) => setNewDomain(e.target.value)}
+                  styles={{
+                    input: {
+                      color: '#000000'
+                    }
+                  }}
+                />
                 <Textarea
                   label={
                     <Text c="#FFFFFF" style={{ display: 'inline' }} fw={700}>
-                      Compliance Answer
+                      Compliance Answer<Text component="span" c="dimmed" ml={4}>(Optional)</Text>
                     </Text>
                   }
-                  description={<Box component="span" c="dimmed" style={{ fontSize: '14px' }}>If this is a compliance-related question, provide the official compliance answer.</Box>}
-                  placeholder="e.g., According to regulation XYZ..."
+                  description={<Box component="span" c="dimmed" style={{ fontSize: '14px' }}>Add any compliance-related information if applicable.</Box>}
+                  placeholder="e.g., According to policy section 2.1..."
                   value={newComplianceAnswer}
                   onChange={(e) => setNewComplianceAnswer(e.target.value)}
                   minRows={2}
@@ -430,7 +455,7 @@ function KnowledgeBaseUpload() {
                 <Textarea
                   label={
                     <Text c="#FFFFFF" style={{ display: 'inline' }} fw={700}>
-                      Notes
+                      Notes<Text component="span" c="dimmed" ml={4}>(Optional)</Text>
                     </Text>
                   }
                   description={<Box component="span" c="dimmed" style={{ fontSize: '14px' }}>Add any additional notes or context about this Q&A.</Box>}
@@ -541,6 +566,12 @@ function KnowledgeBaseUpload() {
                       <Text>{similarQuestions[currentIndex].new_sub_category}</Text>
                     </>
                   )}
+                  {similarQuestions[currentIndex].new_domain && (
+                    <>
+                      <Text size="lg" fw={700}>Domain</Text>
+                      <Text>{similarQuestions[currentIndex].new_domain}</Text>
+                    </>
+                  )}
                   {similarQuestions[currentIndex].new_compliance_answer && (
                     <>
                       <Text size="lg" fw={700}>Compliance Answer</Text>
@@ -571,6 +602,12 @@ function KnowledgeBaseUpload() {
                     <>
                       <Text size="lg" fw={700}>Sub-category</Text>
                       <Text>{similarQuestions[currentIndex].similar_to.sub_category}</Text>
+                    </>
+                  )}
+                  {similarQuestions[currentIndex].similar_to.domain && (
+                    <>
+                      <Text size="lg" fw={700}>Domain</Text>
+                      <Text>{similarQuestions[currentIndex].similar_to.domain}</Text>
                     </>
                   )}
                   {similarQuestions[currentIndex].similar_to.compliance_answer && (

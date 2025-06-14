@@ -8,14 +8,13 @@ This application provides endpoints for:
 - Uploading and validating CSV files
 """
 
-from fastapi import FastAPI, Request, Form, UploadFile, File, BackgroundTasks
+from fastapi import FastAPI, Request, Form, UploadFile, File, BackgroundTasks, HTTPException, status
 from fastapi.templating import Jinja2Templates
-from fastapi.staticfiles import StaticFiles
 from fastapi.responses import RedirectResponse, JSONResponse, StreamingResponse
 from fastapi.middleware.cors import CORSMiddleware
 from sqlalchemy import create_engine, Column, Integer, String, Text, func, DateTime, desc, Boolean
 from sqlalchemy.ext.declarative import declarative_base
-from sqlalchemy.orm import sessionmaker
+from sqlalchemy.orm import sessionmaker, Session
 import os
 import csv
 import io
@@ -30,6 +29,8 @@ import asyncio
 from asyncio import Queue
 import threading
 from dotenv import load_dotenv
+from typing import Optional
+from pydantic import BaseModel
 
 # Load environment variables
 load_dotenv()
@@ -38,14 +39,28 @@ load_dotenv()
 progress_queues = {}
 
 # Database configuration
-DATABASE_URL = os.getenv(
-    "DATABASE_URL",
-    "postgresql://kmsuser:kmspassword@db:5432/kmsdb"
-)
-
+DATABASE_URL = os.getenv("DATABASE_URL", "postgresql://kmsuser:kmspassword@db:5432/kmsdb")
 engine = create_engine(DATABASE_URL)
 SessionLocal = sessionmaker(autocommit=False, autoflush=False, bind=engine)
 Base = declarative_base()
+
+# Initialize FastAPI app
+app = FastAPI()
+
+# Configure CORS
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=["*"],  # In production, replace with specific origins
+    allow_credentials=True,
+    allow_methods=["*"],
+    allow_headers=["*"],
+)
+
+# Initialize templates
+templates = Jinja2Templates(directory="templates")
+
+# Initialize AI Processor
+ai_processor = AIProcessor()
 
 class Questionnaire(Base):
     """
@@ -57,12 +72,11 @@ class Questionnaire(Base):
         answer_key (str): The answer to the question
         category (str): The main category of the question
         sub_category (str): The sub-category of the question
+        domain (str): The domain of the question
         compliance_answer (str): The official compliance answer if applicable
         notes (str): Additional notes or context
         created_at (datetime): Timestamp of when the entry was created
         last_updated (datetime): Timestamp of when the entry was last modified
-        checked_out_by (str): Username of the person checking out the questionnaire
-        checked_out_at (datetime): Timestamp of when the questionnaire was checked out
     """
     __tablename__ = "questionnaires"
 
@@ -71,150 +85,38 @@ class Questionnaire(Base):
     answer_key = Column(Text, nullable=False)
     category = Column(Text, nullable=True)
     sub_category = Column(Text, nullable=True)
+    domain = Column(Text, nullable=True)
     compliance_answer = Column(Text, nullable=True)
     notes = Column(Text, nullable=True)
-    created_at = Column(DateTime, default=datetime.utcnow, nullable=False)
-    last_updated = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow, nullable=False)
-    checked_out_by = Column(Text, nullable=True)
-    checked_out_at = Column(DateTime, nullable=True)
+    created_at = Column(DateTime, default=datetime.utcnow)
+    last_updated = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
 
     def to_dict(self):
-        """
-        Convert the questionnaire entry to a dictionary.
-        
-        Returns:
-            dict: Dictionary representation of the questionnaire entry
-        """
+        """Convert the model instance to a dictionary."""
         return {
             "id": self.id,
             "question": self.question,
             "answer_key": self.answer_key,
             "category": self.category,
             "sub_category": self.sub_category,
+            "domain": self.domain,
             "compliance_answer": self.compliance_answer,
             "notes": self.notes,
             "created_at": self.created_at.isoformat() if self.created_at else None,
-            "last_updated": self.last_updated.isoformat() if self.last_updated else None,
-            "checked_out_by": self.checked_out_by,
-            "checked_out_at": self.checked_out_at.isoformat() if self.checked_out_at else None
+            "last_updated": self.last_updated.isoformat() if self.last_updated else None
         }
 
-    def is_checked_out(self):
-        """Check if the entry is currently checked out."""
-        if not self.checked_out_at or not self.checked_out_by:
-            return False
-        # Consider checkouts older than 4 hours as expired
-        checkout_expiry = timedelta(hours=4)
-        return datetime.utcnow() - self.checked_out_at < checkout_expiry
+# Create tables
+Base.metadata.create_all(bind=engine)
+print("Database initialized successfully")
 
-class ProcessedQuestionnaire(Base):
-    """
-    SQLAlchemy model representing a processed questionnaire entry in the backlog.
-    
-    Attributes:
-        id (int): Primary key
-        filename (str): Original filename of the questionnaire
-        status (str): Status of processing (processing, completed, failed)
-        questions_count (int): Total number of questions in the file
-        processed_count (int): Number of questions processed
-        success_rate (float): Percentage of questions successfully processed
-        unaccepted_answers_count (int): Number of answers that need review
-        entity (str): The entity the questionnaire was processed against
-        error_message (str): Error message if processing failed
-        created_at (datetime): When the questionnaire was uploaded
-        downloaded (bool): Whether the processed file has been downloaded
-        can_download (bool): Whether the file is ready for download
-        csv_content (str): The processed CSV file content
-        low_confidence_answers (Text): JSON string containing low confidence answers and their status
-        edited_answers (Text): JSON string containing edited answers before download
-    """
-    __tablename__ = "processed_questionnaires"
-
-    id = Column(Integer, primary_key=True, index=True)
-    filename = Column(String, nullable=False)
-    status = Column(String, nullable=False)
-    questions_count = Column(Integer, default=0)
-    processed_count = Column(Integer, default=0)
-    success_rate = Column(Integer, default=0)
-    unaccepted_answers_count = Column(Integer, default=0)
-    entity = Column(String, nullable=True)
-    error_message = Column(Text, nullable=True)
-    created_at = Column(DateTime, default=datetime.utcnow)
-    downloaded = Column(Boolean, default=False)
-    can_download = Column(Boolean, default=False)
-    csv_content = Column(Text, nullable=True)
-    low_confidence_answers = Column(Text, nullable=True)  # JSON string
-    edited_answers = Column(Text, nullable=True)  # JSON string
-
-    def to_dict(self):
-        """Convert the processed questionnaire entry to a dictionary."""
-        low_confidence_answers = json.loads(self.low_confidence_answers) if self.low_confidence_answers else []
-        # Count answers that have confidence < 50% and haven't been accepted
-        unaccepted_low_conf_count = len([
-            answer for answer in low_confidence_answers 
-            if answer['confidence'] < 0.5 and not answer.get('accepted', False)
-        ])
-        
-        return {
-            "id": self.id,
-            "filename": self.filename,
-            "status": self.status,
-            "questions_count": self.questions_count,
-            "processed_count": self.processed_count,
-            "success_rate": self.success_rate,
-            "unaccepted_answers_count": unaccepted_low_conf_count,
-            "entity": self.entity,
-            "error_message": self.error_message,
-            "created_at": self.created_at.isoformat() if self.created_at else None,
-            "downloaded": self.downloaded,
-            "can_download": self.can_download,
-            "low_confidence_answers": low_confidence_answers,
-            "edited_answers": json.loads(self.edited_answers) if self.edited_answers else {}
-        }
-
-def init_db():
-    """
-    Initialize the database with the updated schema.
-    This will create the database file and tables if they don't exist.
-    """
+def get_db():
+    """Get a database session."""
+    db = SessionLocal()
     try:
-        # Only create tables if they don't exist
-        Base.metadata.create_all(bind=engine)
-        print("Database initialized successfully")
-    except Exception as e:
-        print(f"Error initializing database: {str(e)}")
-        raise
-
-# Initialize the database when the application starts
-init_db()
-
-app = FastAPI()
-
-# Configure CORS to allow frontend access
-app.add_middleware(
-    CORSMiddleware,
-    allow_origins=["http://localhost:5173", "http://localhost:5174", "http://localhost:5175", "http://localhost:3000", "http://localhost:3001", "http://localhost:3002", "http://localhost:3004", "http://localhost:3005", "http://localhost:3006"],  # Allow all development ports
-    allow_credentials=True,
-    allow_methods=["*"],
-    allow_headers=["*"],
-)
-
-# Mount the frontend static files at the root path
-app.mount("/assets", StaticFiles(directory="frontend/dist/assets"), name="static")
-
-# Serve index.html for the root path
-templates = Jinja2Templates(directory="frontend/dist")
-
-@app.get("/")
-async def serve_frontend(request: Request):
-    return templates.TemplateResponse("index.html", {"request": request})
-
-# Initialize AI processor with Llama service configuration
-ai_processor = AIProcessor(
-    'questionnaire.db',
-    llm_host='llama',  # Use the service name from docker-compose
-    llm_port=11434     # Use the internal port from the Llama container
-)
+        yield db
+    finally:
+        db.close()
 
 def similar(a: str, b: str) -> float:
     """
@@ -276,24 +178,17 @@ def find_similar_question(db, question: str, threshold: float = 0.6):
         return most_similar
     return None
 
+@app.get("/")
+async def serve_frontend(request: Request):
+    return templates.TemplateResponse("index.html", {"request": request})
+
 @app.get("/questions")
 async def get_questions():
-    """
-    Retrieve all questions from the database.
-    
-    Returns:
-        dict: Dictionary containing list of all questions
-    """
+    """Get all questions"""
     db = SessionLocal()
     try:
-        questionnaires = db.query(Questionnaire).all()
-        return {"questions": [q.to_dict() for q in questionnaires]}
-    except Exception as e:
-        print(f"Error fetching questions: {str(e)}")
-        return JSONResponse(
-            status_code=500,
-            content={"message": f"Error fetching questions from database: {str(e)}"}
-        )
+        questions = db.query(Questionnaire).all()
+        return [q.to_dict() for q in questions]
     finally:
         db.close()
 
@@ -303,6 +198,7 @@ async def add_questionnaire(
     answer_key: str = Form(...), 
     category: str = Form(None),
     sub_category: str = Form(None),
+    domain: str = Form(None),
     compliance_answer: str = Form(None),
     notes: str = Form(None)
 ):
@@ -314,6 +210,7 @@ async def add_questionnaire(
         answer_key (str): The answer to the question
         category (str, optional): The main category
         sub_category (str, optional): The sub-category
+        domain (str, optional): The domain
         compliance_answer (str, optional): The compliance answer
         notes (str, optional): Additional notes
         
@@ -330,16 +227,17 @@ async def add_questionnaire(
                 content={
                     "message": "Similar question found",
                     "similar_question": similar.to_dict(),
-                    "similarity": similar_ratio
+                    "similarity_ratio": similar_ratio
                 }
             )
         
-        # Create new questionnaire entry
+        # Create new questionnaire
         new_questionnaire = Questionnaire(
             question=question,
             answer_key=answer_key,
             category=category,
             sub_category=sub_category,
+            domain=domain,
             compliance_answer=compliance_answer,
             notes=notes
         )
@@ -449,7 +347,7 @@ async def upload_csv(
             
             # Validate CSV structure
             required_fields = ['question', 'answer_key']
-            optional_fields = ['category', 'sub_category', 'compliance_answer', 'notes']
+            optional_fields = ['category', 'sub_category', 'domain', 'compliance_answer', 'notes']
             headers = csv_reader.fieldnames
             
             if not headers:
@@ -474,6 +372,15 @@ async def upload_csv(
                 for row in csv_reader:
                     questions_processed += 1
                     total_questions += 1
+
+                    # Transform empty or (NEED QUESTION) questions into a valid format
+                    if not row['question'] or row['question'] == '(NEED QUESTION)':
+                        # Use the first 50 chars of answer_key as the question if available
+                        if row['answer_key']:
+                            preview = row['answer_key'][:50].strip()
+                            row['question'] = f"TODO: {preview}..."
+                        else:
+                            row['question'] = f"TODO: Entry {questions_processed}"
                     
                     # Check for similar questions
                     similar_q = find_similar_question(db, row['question'])
@@ -483,6 +390,7 @@ async def upload_csv(
                             "new_answer": row['answer_key'],
                             "new_category": row.get('category'),
                             "new_sub_category": row.get('sub_category'),
+                            "new_domain": row.get('domain'),
                             "new_compliance_answer": row.get('compliance_answer'),
                             "new_notes": row.get('notes'),
                             "similar_to": similar_q.to_dict(),
@@ -496,6 +404,7 @@ async def upload_csv(
                         answer_key=row['answer_key'],
                         category=row.get('category'),
                         sub_category=row.get('sub_category'),
+                        domain=row.get('domain'),
                         compliance_answer=row.get('compliance_answer'),
                         notes=row.get('notes')
                     )
@@ -592,7 +501,6 @@ async def resolve_similar(
 async def process_questionnaire(
     file: UploadFile = File(...),
     threshold: float = 0.6,
-    entity: str = None,
     request: Request = None
 ):
     """
@@ -779,8 +687,7 @@ async def process_questionnaire(
         try:
             backlog_entry = ProcessedQuestionnaire(
                 filename=file.filename,
-                status="processing",
-                entity=entity
+                status="processing"
             )
             db.add(backlog_entry)
             db.commit()
@@ -854,38 +761,63 @@ async def process_questionnaire(
         )
 
 @app.get("/search")
-async def search_questions(query: str, category: str = None):
+async def search_questions(
+    query: str = None,
+    field_question: str = None,
+    field_answer_key: str = None,
+    field_category: str = None,
+    field_sub_category: str = None,
+    field_domain: str = None,
+    field_compliance_answer: str = None,
+    field_notes: str = None
+):
     """
     Search for questions in the database.
-    
-    Args:
-        query (str): The search query
-        category (str, optional): Filter by category
-        
-    Returns:
-        list: List of matching questionnaire entries
+    Supports both general search across all fields and field-specific searches.
     """
-    db = SessionLocal()
     try:
-        # Base query
-        search = db.query(Questionnaire)
-        
-        # Apply search filters
+        db = SessionLocal()
+        base_query = db.query(Questionnaire)
+        results = []
+
+        # Handle field-specific searches
+        if field_question:
+            base_query = base_query.filter(Questionnaire.question.ilike(f"%{field_question}%"))
+        if field_answer_key:
+            base_query = base_query.filter(Questionnaire.answer_key.ilike(f"%{field_answer_key}%"))
+        if field_category:
+            base_query = base_query.filter(Questionnaire.category.ilike(f"%{field_category}%"))
+        if field_sub_category:
+            base_query = base_query.filter(Questionnaire.sub_category.ilike(f"%{field_sub_category}%"))
+        if field_domain:
+            base_query = base_query.filter(Questionnaire.domain.ilike(f"%{field_domain}%"))
+        if field_compliance_answer:
+            base_query = base_query.filter(Questionnaire.compliance_answer.ilike(f"%{field_compliance_answer}%"))
+        if field_notes:
+            base_query = base_query.filter(Questionnaire.notes.ilike(f"%{field_notes}%"))
+
+        # Handle general search across all fields
         if query:
-            search = search.filter(
+            base_query = base_query.filter(
                 (Questionnaire.question.ilike(f"%{query}%")) |
                 (Questionnaire.answer_key.ilike(f"%{query}%")) |
+                (Questionnaire.category.ilike(f"%{query}%")) |
+                (Questionnaire.sub_category.ilike(f"%{query}%")) |
+                (Questionnaire.domain.ilike(f"%{query}%")) |
                 (Questionnaire.compliance_answer.ilike(f"%{query}%")) |
                 (Questionnaire.notes.ilike(f"%{query}%"))
             )
+
+        # Execute the query and convert results to dictionaries
+        results = [q.to_dict() for q in base_query.all()]
         
-        # Apply category filter if provided
-        if category:
-            search = search.filter(Questionnaire.category == category)
-        
-        # Execute query and convert results to dict
-        results = [q.to_dict() for q in search.all()]
         return {"results": results}
+    except Exception as e:
+        print(f"Error searching questions: {str(e)}")
+        return JSONResponse(
+            status_code=500,
+            content={"message": "Failed to search questions"}
+        )
     finally:
         db.close()
 
@@ -965,21 +897,21 @@ async def get_monthly_entries():
     try:
         db = SessionLocal()
         
-        # Query to get counts by month
+        # Query to get counts by month using PostgreSQL's date_trunc
         monthly_counts = (
             db.query(
-                func.strftime('%Y-%m', Questionnaire.created_at).label('month'),
+                func.date_trunc('month', Questionnaire.created_at).label('month'),
                 func.count().label('count')
             )
-            .group_by(func.strftime('%Y-%m', Questionnaire.created_at))
-            .order_by(func.strftime('%Y-%m', Questionnaire.created_at))
+            .group_by(func.date_trunc('month', Questionnaire.created_at))
+            .order_by(func.date_trunc('month', Questionnaire.created_at))
             .all()
         )
         
         # Format the results
         results = [
             {
-                "month": entry.month,
+                "month": entry.month.strftime('%Y-%m'),
                 "count": entry.count
             }
             for entry in monthly_counts
@@ -995,13 +927,13 @@ async def get_monthly_entries():
     finally:
         db.close()
 
-@app.get("/metrics/entity-distribution")
-async def get_entity_distribution():
+@app.get("/metrics/category-distribution")
+async def get_category_distribution():
     """
-    Get the distribution of questions across different entities.
+    Get the distribution of questions by category.
     
     Returns:
-        dict: Count of questions per entity and percentage distribution
+        dict: Category distribution and total count
     """
     try:
         db = SessionLocal()
@@ -1009,33 +941,33 @@ async def get_entity_distribution():
         # Get total count
         total_count = db.query(func.count(Questionnaire.id)).scalar()
         
-        # Query to get counts by entity
-        entity_counts = (
+        # Get category counts
+        category_counts = (
             db.query(
-                Questionnaire.entity,
-                func.count(Questionnaire.id).label('count')
+                Questionnaire.category,
+                func.count().label('count')
             )
-            .group_by(Questionnaire.entity)
-            .order_by(desc('count'))
+            .group_by(Questionnaire.category)
             .all()
         )
         
-        # Format the results with percentages
-        results = [
-            {
-                "entity": entry.entity or "Unspecified",
-                "count": entry.count,
-                "percentage": round((entry.count / total_count) * 100, 2) if total_count > 0 else 0
-            }
-            for entry in entity_counts
-        ]
+        # Format results
+        results = []
+        for category, count in category_counts:
+            category_name = category if category else "Uncategorized"
+            percentage = round((count / total_count) * 100, 2) if total_count > 0 else 0
+            results.append({
+                "category": category_name,
+                "count": count,
+                "percentage": percentage
+            })
         
-        return {"entity_distribution": results, "total_questions": total_count}
+        return {"category_distribution": results, "total_questions": total_count}
     except Exception as e:
-        print(f"Error getting entity distribution: {str(e)}")
+        print(f"Error getting category distribution: {str(e)}")
         return JSONResponse(
             status_code=500,
-            content={"message": f"Error getting entity distribution: {str(e)}"}
+            content={"message": f"Error getting category distribution: {str(e)}"}
         )
     finally:
         db.close()
@@ -1181,7 +1113,6 @@ async def get_system_summary():
         
         # Get basic counts
         total_questions = db.query(func.count(Questionnaire.id)).scalar()
-        total_entities = db.query(func.count(func.distinct(Questionnaire.entity))).scalar()
         
         # Get recent activity
         last_24h = datetime.utcnow() - timedelta(hours=24)
@@ -1211,7 +1142,6 @@ async def get_system_summary():
         return {
             "total_metrics": {
                 "total_questions": total_questions,
-                "total_entities": total_entities,
                 "days_active": days_active
             },
             "activity_metrics": {
@@ -1581,17 +1511,11 @@ async def get_review_status_metrics():
         )
         
         return {
-            "total_questionnaires": total_count,
+            "total": total_count,
             "in_review": in_review_count,
             "completed": completed_count,
             "failed": failed_count,
-            "processing": processing_count,
-            "percentages": {
-                "in_review": round((in_review_count / total_count) * 100, 2) if total_count > 0 else 0,
-                "completed": round((completed_count / total_count) * 100, 2) if total_count > 0 else 0,
-                "failed": round((failed_count / total_count) * 100, 2) if total_count > 0 else 0,
-                "processing": round((processing_count / total_count) * 100, 2) if total_count > 0 else 0
-            }
+            "processing": processing_count
         }
     except Exception as e:
         print(f"Error getting review status metrics: {str(e)}")
@@ -1619,53 +1543,9 @@ async def clear_knowledge_base():
     finally:
         db.close()
 
-@app.post("/questionnaires/{questionnaire_id}/checkout")
-async def checkout_questionnaire(
+@app.put("/questionnaires/{questionnaire_id}")
+async def update_questionnaire(
     questionnaire_id: int,
-    user: str = Form(...),
-):
-    """
-    Checkout a questionnaire entry for editing.
-    
-    Args:
-        questionnaire_id (int): ID of the questionnaire to checkout
-        user (str): Username of the person checking out
-        
-    Returns:
-        dict: Updated questionnaire entry
-    """
-    db = SessionLocal()
-    try:
-        questionnaire = db.query(Questionnaire).filter(Questionnaire.id == questionnaire_id).first()
-        if not questionnaire:
-            return JSONResponse(
-                status_code=404,
-                content={"message": "Questionnaire not found"}
-            )
-        
-        if questionnaire.is_checked_out():
-            if questionnaire.checked_out_by != user:
-                return JSONResponse(
-                    status_code=409,
-                    content={
-                        "message": "Questionnaire is already checked out",
-                        "checked_out_by": questionnaire.checked_out_by,
-                        "checked_out_at": questionnaire.checked_out_at.isoformat()
-                    }
-                )
-        
-        questionnaire.checked_out_by = user
-        questionnaire.checked_out_at = datetime.utcnow()
-        db.commit()
-        db.refresh(questionnaire)
-        return questionnaire.to_dict()
-    finally:
-        db.close()
-
-@app.post("/questionnaires/{questionnaire_id}/checkin")
-async def checkin_questionnaire(
-    questionnaire_id: int,
-    user: str = Form(...),
     question: str = Form(...),
     answer_key: str = Form(...),
     category: str = Form(None),
@@ -1674,11 +1554,10 @@ async def checkin_questionnaire(
     notes: str = Form(None)
 ):
     """
-    Check in a questionnaire entry after editing.
+    Update a questionnaire entry.
     
     Args:
-        questionnaire_id (int): ID of the questionnaire to check in
-        user (str): Username of the person checking in
+        questionnaire_id (int): ID of the questionnaire to update
         question (str): Updated question text
         answer_key (str): Updated answer text
         category (str, optional): Updated category
@@ -1698,12 +1577,6 @@ async def checkin_questionnaire(
                 content={"message": "Questionnaire not found"}
             )
         
-        if not questionnaire.is_checked_out() or questionnaire.checked_out_by != user:
-            return JSONResponse(
-                status_code=403,
-                content={"message": "You don't have permission to check in this questionnaire"}
-            )
-        
         # Update fields
         questionnaire.question = question
         questionnaire.answer_key = answer_key
@@ -1712,47 +1585,7 @@ async def checkin_questionnaire(
         questionnaire.compliance_answer = compliance_answer
         questionnaire.notes = notes
         questionnaire.last_updated = datetime.utcnow()
-        questionnaire.checked_out_by = None
-        questionnaire.checked_out_at = None
         
-        db.commit()
-        db.refresh(questionnaire)
-        return questionnaire.to_dict()
-    finally:
-        db.close()
-
-@app.post("/questionnaires/{questionnaire_id}/cancel-checkout")
-async def cancel_checkout(
-    questionnaire_id: int,
-    user: str = Form(...)
-):
-    """
-    Cancel a checkout without saving changes.
-    
-    Args:
-        questionnaire_id (int): ID of the questionnaire
-        user (str): Username of the person canceling the checkout
-        
-    Returns:
-        dict: Updated questionnaire entry
-    """
-    db = SessionLocal()
-    try:
-        questionnaire = db.query(Questionnaire).filter(Questionnaire.id == questionnaire_id).first()
-        if not questionnaire:
-            return JSONResponse(
-                status_code=404,
-                content={"message": "Questionnaire not found"}
-            )
-        
-        if not questionnaire.is_checked_out() or questionnaire.checked_out_by != user:
-            return JSONResponse(
-                status_code=403,
-                content={"message": "You don't have permission to cancel this checkout"}
-            )
-        
-        questionnaire.checked_out_by = None
-        questionnaire.checked_out_at = None
         db.commit()
         db.refresh(questionnaire)
         return questionnaire.to_dict()
@@ -1761,4 +1594,4 @@ async def cancel_checkout(
 
 if __name__ == "__main__":
     import uvicorn
-    uvicorn.run(app, host="0.0.0.0", port=8000) 
+    uvicorn.run("main:app", host="0.0.0.0", port=8000, reload=True) 

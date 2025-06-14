@@ -116,12 +116,13 @@ function AppContent() {
       styles={(theme) => ({
         root: {
           width: '100%',
-          minHeight: '100vh'
+          minHeight: '100vh',
+          backgroundColor: '#1A1B1E'
         },
         main: {
           width: '100%',
           flex: 1,
-          backgroundColor: '#000000',
+          backgroundColor: '#1A1B1E',
           paddingLeft: 'calc(300px + 40px)', // navbar width + padding
           paddingRight: '40px',
           paddingTop: '20px',
@@ -131,8 +132,8 @@ function AppContent() {
           }
         },
         navbar: {
-          backgroundColor: '#333333',
-          borderRight: '1px solid #3A4444'
+          backgroundColor: '#25262B',
+          borderRight: '1px solid #2C2E33'
         }
       })}
     >

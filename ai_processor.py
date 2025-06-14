@@ -3,64 +3,44 @@ from typing import List, Dict
 from difflib import SequenceMatcher
 import re
 from collections import Counter
-from llama_service import LlamaService
 import os
 from dotenv import load_dotenv
+import json
+import pandas as pd
+from datetime import datetime
+# Temporarily removing llama_service import as it's not available
+# from llama_service import LlamaService
 
 class AIProcessor:
-    def __init__(self, db_url: str = None, llm_host: str = "localhost", llm_port: int = 11434):
-        load_dotenv()
-        self.db_url = db_url or os.getenv("DATABASE_URL", "postgresql://kmsuser:kmspassword@db:5432/kmsdb")
+    def __init__(self):
+        self.model = None
         self.questions = []
         self.answers = []
         self.ids = []
+        self.db_url = os.getenv("DATABASE_URL", "postgresql://kmsuser:kmspassword@db:5432/kmsdb")
         self._load_knowledge_base()
-        self.llm_service = LlamaService(host=llm_host, port=llm_port)
+        # self.llm_service = LlamaService(host=llm_host, port=llm_port)  # Comment out for now
         print(f"AI Processor initialized with {len(self.questions)} questions in knowledge base")
     
     def _load_knowledge_base(self):
         """Load the knowledge base."""
-        conn = None
         try:
             conn = psycopg2.connect(self.db_url)
-            cursor = conn.cursor()
+            cur = conn.cursor()
+            cur.execute("SELECT id, question, answer_key FROM questionnaires")
+            rows = cur.fetchall()
             
-            # Check if the questionnaires table exists
-            cursor.execute("""
-                SELECT EXISTS (
-                    SELECT FROM information_schema.tables 
-                    WHERE table_schema = 'public' 
-                    AND table_name = 'questionnaires'
-                )
-            """)
-            if not cursor.fetchone()[0]:
-                print("Questionnaires table does not exist. Creating it...")
-                cursor.execute("""
-                    CREATE TABLE questionnaires (
-                        id SERIAL PRIMARY KEY,
-                        question TEXT NOT NULL,
-                        answer_key TEXT NOT NULL,
-                        entity TEXT,
-                        comment TEXT,
-                        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
-                    )
-                """)
-                conn.commit()
-                return
+            self.ids = [row[0] for row in rows]
+            self.questions = [row[1] for row in rows]
+            self.answers = [row[2] for row in rows]
             
-            cursor.execute("SELECT id, question, answer_key FROM questionnaires")
-            results = cursor.fetchall()
-            
-            self.questions = [row[1] for row in results]
-            self.answers = [row[2] for row in results]
-            self.ids = [row[0] for row in results]
-            
+            cur.close()
+            conn.close()
         except Exception as e:
             print(f"Error loading knowledge base: {str(e)}")
-            raise
-        finally:
-            if conn:
-                conn.close()
+            self.ids = []
+            self.questions = []
+            self.answers = []
     
     def _calculate_similarity(self, a: str, b: str) -> float:
         """Calculate similarity between two strings using a combination of methods."""
@@ -285,11 +265,11 @@ class AIProcessor:
             if not similar_qa:
                 # No similar questions found, use LLM
                 print("No similar questions found, using LLM")
-                llm_result = self.llm_service.generate_answer(question)
+                # llm_result = self.llm_service.generate_answer(question)
                 return {
                     'question': question,
-                    'answer': llm_result['answer'],
-                    'confidence': llm_result['confidence'],
+                    'answer': "LLM answer placeholder",
+                    'confidence': 0.0,
                     'is_ai_generated': True,
                     'source': 'llm',
                     'similar_questions': []
@@ -321,9 +301,15 @@ class AIProcessor:
                     {'question': qa['question'], 'answer': qa['answer']}
                     for qa in similar_qa if qa['similarity'] > 0.3
                 ]}
-                llm_result = self.llm_service.generate_answer(question, context)
-                llm_result['similar_questions'] = similar_qa
-                return llm_result
+                # llm_result = self.llm_service.generate_answer(question, context)
+                return {
+                    'question': question,
+                    'answer': "LLM answer with context placeholder",
+                    'confidence': confidence,
+                    'is_ai_generated': True,
+                    'source': 'llm_with_context',
+                    'similar_questions': similar_qa
+                }
             
             # For high confidence but not exact match, synthesize from similar questions
             print("Synthesizing answer from similar questions")
@@ -352,9 +338,15 @@ class AIProcessor:
                 {'question': qa['question'], 'answer': qa['answer']}
                 for qa in similar_qa if qa['similarity'] > 0.3
             ]}
-            llm_result = self.llm_service.generate_answer(question, context)
-            llm_result['similar_questions'] = similar_qa
-            return llm_result
+            # llm_result = self.llm_service.generate_answer(question, context)
+            return {
+                'question': question,
+                'answer': "LLM answer with context placeholder",
+                'confidence': 0.0,
+                'is_ai_generated': True,
+                'source': 'llm_with_context',
+                'similar_questions': similar_qa
+            }
             
         except Exception as e:
             print(f"Error processing question: {e}")

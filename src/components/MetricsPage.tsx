@@ -41,9 +41,9 @@ interface MetricsData {
       count: number;
     }>;
   };
-  entityDistribution?: {
-    entity_distribution: Array<{
-      entity: string;
+  categoryDistribution?: {
+    category_distribution: Array<{
+      category: string;
       count: number;
       percentage: number;
     }>;
@@ -101,7 +101,6 @@ interface MetricsData {
   systemSummary?: {
     total_metrics: {
       total_questions: number;
-      total_entities: number;
       days_active: number;
     };
     activity_metrics: {
@@ -137,7 +136,7 @@ const MetricsPage: FC = () => {
         setLoading(true);
         const endpoints = [
           'monthly-entries',
-          'entity-distribution',
+          'category-distribution',
           'daily-trends',
           'complexity-analysis',
           'confidence-distribution',
@@ -152,7 +151,7 @@ const MetricsPage: FC = () => {
 
         setMetrics({
           monthlyEntries: results[0],
-          entityDistribution: results[1],
+          categoryDistribution: results[1],
           dailyTrends: results[2],
           complexityAnalysis: results[3],
           confidenceDistribution: results[4],
@@ -193,10 +192,6 @@ const MetricsPage: FC = () => {
                 <Group>
                   <Text size="xl">{metrics.systemSummary?.total_metrics.total_questions}</Text>
                   <Text>Total Questions</Text>
-                </Group>
-                <Group>
-                  <Text size="xl">{metrics.systemSummary?.total_metrics.total_entities}</Text>
-                  <Text>Total Entities</Text>
                 </Group>
                 <Group>
                   <Text size="xl">{metrics.systemSummary?.total_metrics.days_active}</Text>
@@ -271,32 +266,27 @@ const MetricsPage: FC = () => {
           <Group grow>
             <Paper>
               <Group position="apart">
-                <Title order={2}>Entity Distribution</Title>
+                <Title order={2}>Category Distribution</Title>
               </Group>
               <div className="h-80">
                 <ResponsiveContainer width="100%" height="100%">
                   <PieChart>
                     <Pie
-                      data={metrics.entityDistribution?.entity_distribution || []}
+                      data={metrics.categoryDistribution?.category_distribution || []}
                       dataKey="count"
-                      nameKey="entity"
+                      nameKey="category"
                       cx="50%"
                       cy="50%"
                       outerRadius={80}
-                      label
+                      label={(props: { payload: { category: string; percentage: number } }) => 
+                        `${props.payload.category} (${props.payload.percentage.toFixed(2)}%)`
+                      }
                     >
-                      {(metrics.entityDistribution?.entity_distribution || []).map((_entry, index) => (
+                      {(metrics.categoryDistribution?.category_distribution || []).map((_entry, index) => (
                         <Cell key={`cell-${index}`} fill={COLORS[index % COLORS.length]} />
                       ))}
                     </Pie>
-                    <RechartsTooltip 
-                      wrapperStyle={{ backgroundColor: 'white', padding: '1rem', borderRadius: '0.5rem', boxShadow: '0 2px 4px rgba(0,0,0,0.1)', border: '1px solid #e2e8f0' }}
-                      formatter={(value: number, _name: string, props: any) => [
-                        `Count: ${value}`,
-                        `${props.payload.entity} (${props.payload.percentage.toFixed(2)}%)`
-                      ]}
-                    />
-                    <Legend />
+                    <RechartsTooltip />
                   </PieChart>
                 </ResponsiveContainer>
               </div>

@@ -19,7 +19,6 @@ RUN pip install --no-cache-dir psycopg2-binary==2.9.9 && \
 # Copy application files
 COPY main.py .
 COPY ai_processor.py .
-COPY test_questions.csv .
 COPY templates ./templates
 
 # Create models directory for caching

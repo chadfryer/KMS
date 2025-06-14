@@ -6,7 +6,7 @@ import { IconAlertCircle } from '@tabler/icons-react'
 function MetricsView() {
   const [metrics, setMetrics] = useState({
     monthlyData: { data: [], loading: true, error: null },
-    entityDistribution: { data: [], loading: true, error: null },
+    categoryDistribution: { data: [], loading: true, error: null },
     dailyTrends: { data: null, loading: true, error: null },
     complexityAnalysis: { data: null, loading: true, error: null },
     systemSummary: { data: null, loading: true, error: null },
@@ -63,9 +63,9 @@ function MetricsView() {
       }
     }
 
-    const fetchEntityDistribution = async () => {
-      const { data, error } = await fetchMetric('entity-distribution')
-      updateMetric('entityDistribution', data?.entity_distribution || [], error)
+    const fetchCategoryDistribution = async () => {
+      const { data, error } = await fetchMetric('category-distribution')
+      updateMetric('categoryDistribution', data?.category_distribution || [], error)
     }
 
     const fetchComplexityAnalysis = async () => {
@@ -85,7 +85,7 @@ function MetricsView() {
 
     // Fetch all metrics independently
     fetchMonthlyData()
-    fetchEntityDistribution()
+    fetchCategoryDistribution()
     fetchComplexityAnalysis()
     fetchSystemSummary()
     fetchReviewStatus()
@@ -153,8 +153,8 @@ function MetricsView() {
     return renderMetricSection("Monthly Chart", content, loading, error)
   }
 
-  const renderEntityDistribution = () => {
-    const { data, loading, error } = metrics.entityDistribution
+  const renderCategoryDistribution = () => {
+    const { data, loading, error } = metrics.categoryDistribution
     const COLORS = ['#CC0000', '#990000', '#660000', '#330000', '#FF0000', '#FF3333']
 
     const content = data?.length > 0 ? (
@@ -164,11 +164,11 @@ function MetricsView() {
             <Pie
               data={data}
               dataKey="count"
-              nameKey="entity"
+              nameKey="category"
               cx="50%"
               cy="50%"
               outerRadius={100}
-              label={({ cx, cy, midAngle, innerRadius, outerRadius, entity, percentage }) => {
+              label={({ cx, cy, midAngle, innerRadius, outerRadius, category, percentage }) => {
                 const RADIAN = Math.PI / 180;
                 const radius = outerRadius * 1.2;
                 const x = cx + radius * Math.cos(-midAngle * RADIAN);
@@ -181,7 +181,7 @@ function MetricsView() {
                     textAnchor={x > cx ? 'start' : 'end'}
                     dominantBaseline="central"
                   >
-                    {`${entity} (${percentage}%)`}
+                    {`${category} (${percentage}%)`}
                   </text>
                 );
               }}
@@ -203,10 +203,10 @@ function MetricsView() {
         </ResponsiveContainer>
       </div>
     ) : (
-      <Text c="dimmed">No entity distribution data available</Text>
+      <Text c="dimmed">No category distribution data available</Text>
     )
 
-    return renderMetricSection("Entity Distribution", content, loading, error)
+    return renderMetricSection("Category Distribution", content, loading, error)
   }
 
   const renderComplexityAnalysis = () => {
@@ -283,10 +283,6 @@ function MetricsView() {
           <div>
             <Text size="xl" weight={700} c="dimmed">{data.total_metrics.total_questions}</Text>
             <Text size="sm" c="dimmed">Total Questions</Text>
-          </div>
-          <div>
-            <Text size="xl" weight={700} c="dimmed">{data.total_metrics.total_entities}</Text>
-            <Text size="sm" c="dimmed">Total Entities</Text>
           </div>
           <div>
             <Text size="xl" weight={700} c="dimmed">{data.activity_metrics.last_24h_submissions}</Text>
@@ -409,11 +405,11 @@ function MetricsView() {
             </Paper>
           </Grid.Col>
 
-          <Grid.Col span={6}>
+          <Grid.Col span={12}>
             <Paper p={40} radius="lg" withBorder>
               <Stack spacing="xl">
-                <Title order={2} size={24}>Entity Distribution</Title>
-                {renderEntityDistribution()}
+                <Title order={2} size={24}>Category Distribution</Title>
+                {renderCategoryDistribution()}
               </Stack>
             </Paper>
           </Grid.Col>

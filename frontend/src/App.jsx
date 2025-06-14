@@ -17,7 +17,7 @@ import QuestionnaireManagement from './QuestionnaireManagement.jsx'
 import MetricsView from './MetricsView.jsx'
 import MainView from './MainView.jsx'
 import QuestionnaireBacklog from './QuestionnaireBacklog.jsx'
-import headerImage from './assets/header-image.png'
+import headerImage from './assets/docker-logo.svg'
 
 const FUTURE_FLAGS = {
   v7_startTransition: true,
@@ -41,8 +41,8 @@ function NavContent() {
       <div className="flex justify-center mb-6">
         <img 
           src={headerImage} 
-          alt="Chad's Knowledge Management" 
-          className="h-[180px] object-contain"
+          alt="Docker Logo" 
+          className="h-[120px] w-[120px] object-contain"
         />
       </div>
       
